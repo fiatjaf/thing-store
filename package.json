@@ -1,0 +1,35 @@
+{
+  "name": "arbitrary-kv-groups",
+  "version": "0.0.0",
+  "scripts": {
+    "watch": "find -name \"*.js\" ! -name \"bundle.js\" ! -path \"*node_modules*\" | entr browserifyinc -vd app.js -o bundle.js",
+    "build": "browserify -g aliasify app.js -o bundle.js",
+    "heroku-postbuild": "browserify -g aliasify powerup/app.js -o powerup/bundle.js"
+  },
+  "browserify": {
+    "transform": [
+      [
+        "bubleify",
+        {
+          "transforms": {
+            "dangerousTaggedTemplateString": true
+          },
+          "objectAssign": "xtend",
+          "sourceMap": true
+        }
+      ]
+    ]
+  },
+  "license": "ISC",
+  "dependencies": {
+    "react": "^16.1.1",
+    "react-dom": "^16.1.1",
+    "react-grid-layout": "^0.16.0",
+    "react-hyperscript": "^3.0.0"
+  },
+  "devDependencies": {
+    "browserify": "^14.5.0",
+    "browserify-incremental": "^3.1.1",
+    "bubleify": "^1.0.0"
+  }
+}
