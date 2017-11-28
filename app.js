@@ -3,6 +3,7 @@ const render = require('react-dom').render
 const cuid = require('cuid')
 const h = require('react-hyperscript')
 const styled = require('styled-components').default
+const hashbow = require('hashbow')
 const RGL = require('react-grid-layout')
 const { getLayoutItem } = require('react-grid-layout/build/utils')
 
@@ -83,13 +84,14 @@ class App extends React.Component {
   }
 }
 
-const docDiv = styled.div`
-  background: white;
+const docDiv = styled.div`A
   height: 100%;
   overflow: hidden;
-  border: 2px solid papayawhip;
+  border: 2px solid ${props => hashbow(props.id)};
+  background-color: 2px solid ${props => hashbow(props.id)};
 
   table {
+    background-color: white;
     width: 100%;
     margin: 0;
     border-collapse: collapse;
@@ -102,6 +104,17 @@ const docDiv = styled.div`
   }
 
   th {
+    width: 39%;
+    max-width: 100px;
+    position: relative;
+    background-color: #f6f1f6;
+
+    &:after {
+      content: ": ";
+      position: absolute;
+      right: 0;
+    }
+
     input {
       text-align: right;
     }
@@ -111,8 +124,9 @@ const docDiv = styled.div`
     width: 100%;
     height: 100%;
     border: none;
-    padding: 0 5px;
+    padding-right: 4px;
     font-family: monospace;
+    background-color: inherir;
 
     &:focus {
       background-color: #def6ff;
@@ -143,13 +157,13 @@ class Document extends React.Component {
     let record = this.cursor.get() || {_id: this.props._id, kv: []}
 
     return (
-      h(docDiv, [
+      h(docDiv, {id: record._id}, [
         h('table', {title: record._id}, [
           h('tbody', {}, record
             .kv
             .concat([['', '']])
             .map(([k, v], i) => console.log('kv', k, v, i) ||
-              h('tr', {key: i}, [
+              h('tr', {key: i, id: k}, [
                 h('th', [
                   h('input', {
                     value: k,
@@ -159,7 +173,7 @@ class Document extends React.Component {
                       } else {
                         record.kv.push([e.target.value, ''])
                       }
-                      this.cursor.set(record)
+                      this.cursor.apply(() => record)
                       tree.commit()
                     }
                   })
@@ -173,7 +187,7 @@ class Document extends React.Component {
                       } else {
                         record.kv.push(['', e.target.value])
                       }
-                      this.cursor.set(record)
+                      this.cursor.apply(() => record)
                       tree.commit()
                     }
                   })

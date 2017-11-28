@@ -21,18 +21,19 @@ var tree = new Baobab({
   immutable: false,
   persistent: true, // false?
   asynchronous: true, // false?
-  monkeyBusiness: false
+  monkeyBusiness: false,
+  pure: false
 })
 
 module.exports.tree = tree
 
-tree.select('records').on('update', d => {
-  console.log('records updated', d)
+tree.select('records').on('update', e => {
+  console.log('records updated', e.data.currentData)
 
   // schedule record update on pouchdb
 })
-tree.select('layout').on('update', d => {
-  console.log('layout updated', d)
+tree.select('layout').on('update', e => {
+  console.log('layout updated', e.data.currentData)
 
   // schedule layout update on pouchdb
 })
