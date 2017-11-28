@@ -16,7 +16,8 @@ var tree = new Baobab({
     layout: []
   },
   draggable: false,
-  records: {}
+  records: {},
+  pendingSaves: {}
 }, {
   immutable: false,
   persistent: true, // false?
@@ -31,14 +32,31 @@ tree.select('records').on('update', e => {
   console.log('records updated', e.data.currentData)
 
   // schedule record update on pouchdb
+  for (let _id in e.data.currentData) {
+    if (e.data.previousData[_id] !== e.data.currentData[_id]) {
+      tree.set(['pendingSaves', _id], e.data.currentData[_id])
+    }
+  }
 })
 tree.select('layout').on('update', e => {
   console.log('layout updated', e.data.currentData)
 
   // schedule layout update on pouchdb
+  tree.set(['pendingSaves', 'layout'], e.data.currentData)
 })
 
 // ---
+
+module.exports.saveToPouch = function () {
+  let byid = tree.get('pendingSaves')
+  let docslist = Object.keys(byid).map(_id => byid[_id])
+
+  return db.bulkDocs(docslist)
+    .then(r => {
+      tree.set('pendingSaves', {})
+      return r
+    })
+}
 
 db.allDocs({include_docs: true})
   .then(res => res.rows

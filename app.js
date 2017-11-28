@@ -9,7 +9,7 @@ const { getLayoutItem } = require('react-grid-layout/build/utils')
 
 const ReactGridLayout = RGL.WidthProvider(RGL)
 
-const { tree } = require('./state')
+const { tree, saveToPouch } = require('./state')
 
 class App extends React.Component {
   constructor () {
@@ -32,11 +32,14 @@ class App extends React.Component {
   }
 
   render () {
-    let {layout, draggable, records} = tree.project({
+    let {layout, draggable, records, pending} = tree.project({
       layout: ['layout', 'layout'],
       draggable: ['draggable'],
-      records: ['records']
+      records: ['records'],
+      pending: ['pendingSaves']
     })
+
+    let hasPending = Object.keys(pending).length
 
     return (
       h('div', [
@@ -46,6 +49,14 @@ class App extends React.Component {
             h('button.button.is-success', {
               onClick: () => tree.set('draggable', !draggable)
             }, draggable ? 'done' : 'rearrange')
+          ]),
+          h('.column', [
+            h('button.button.is-info', {
+              onClick: () => saveToPouch()
+                .then(r => console.log('saved to pouch', r))
+                .catch(e => console.log('failed saving to pouch', e)),
+              disabled: !hasPending
+            }, hasPending ? 'Save' : 'Everything saved already')
           ])
         ]),
         h(ReactGridLayout, {
