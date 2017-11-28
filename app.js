@@ -5,136 +5,105 @@ const h = require('react-hyperscript')
 const styled = require('styled-components').default
 const RGL = require('react-grid-layout')
 const { getLayoutItem } = require('react-grid-layout/build/utils')
-const { List, Map } = require('immutable')
 
 const ReactGridLayout = RGL.WidthProvider(RGL)
 
-const { db, KV } = require('./db')
+const { tree } = require('./state')
 
 class App extends React.Component {
   constructor () {
     super()
 
-    this.state = {
-      layout: [],
-      draggable: false,
-      records: Map()
-    }
+    this.recordsCursor = tree.select('records')
+    this.draggableCursor = tree.select('draggable')
   }
 
   componentDidMount () {
-    db.get('layout')
-      .then(layout => {
-        console.log('loaded layout', layout)
-        this.setState({layout: layout.layout})
-        this.layout_rev = layout._rev
-      })
-      .catch(e => console.log('error loading layout', e))
-
-    this.changes = db.changes({include_docs: true, live: true})
-    this.changes.on('change', ({doc}) => {
-      if (doc._id.slice(0, 2) === 'r-') {
-        console.log('record change', doc)
-        var records
-
-        if (doc._deleted) {
-          records = this.state.records.delete(doc._id)
-        } else {
-          records = this.state.records.set(doc._id, doc)
-        }
-
-        this.setState({
-          records: records
-        })
-      }
+    this.recordsCursor.on('update', () => {
+      this.forceUpdate()
     })
+    this.draggableCursor.on('update', () => { this.forceUpdate() })
   }
 
   componentWillUnmount () {
-    this.changes.cancel()
+    this.recordsCursor.release()
+    this.draggableCursor.release()
   }
 
   render () {
+    let {layout, draggable, records} = tree.project({
+      layout: ['layout', 'layout'],
+      draggable: ['draggable'],
+      records: ['records']
+    })
+
     return (
       h('div', [
         h('.columns.is-mobile', [
           h('.column', 'data at "~"'),
           h('.column', [
             h('button.button.is-success', {
-              onClick: () => this.setState({ draggable: !this.state.draggable })
-            }, this.state.draggable ? 'done' : 'rearrange')
+              onClick: () => tree.set('draggable', !draggable)
+            }, draggable ? 'done' : 'rearrange')
           ])
         ]),
         h(ReactGridLayout, {
-          isDraggable: this.state.draggable,
-          // items: 20,
-          rowHeight: 24,
-          cols: 14,
-          onLayoutChange: (l) => this.saveLayout(l),
-          // containerPadding: [12, 12],
-          layout: this.state.layout
-        }, this.state.records
-          .toList()
-          .push({
+          isDraggable: draggable,
+          items: 40,
+          rowHeight: 30,
+          cols: 12,
+          onLayoutChange: l => tree.set(['layout', 'layout'], l),
+          containerPadding: [12, 12],
+          margin: [0, 0],
+          autoSize: false,
+          layout: layout
+        }, Object.keys(records)
+          .map(_id => records[_id])
+          .concat({
             /* a new record will be created when this blank is edited */ 
             _id: 'r-' + cuid.slug(),
             kv: []
           })
-          .map(doc => {
-            let layoutItem = getLayoutItem(this.state.layout, doc._id)
-            console.log('item', doc._id, 'height', doc.kv.length + 1)
+          .map(record => {
+            let layoutItem = getLayoutItem(layout, record._id)
+            console.log('item', record._id, 'height', record.kv.length + 1)
 
             return h('div', {
-              key: doc._id,
+              key: record._id,
               'data-grid': layoutItem
-                ? Object.assign({h: doc.kv.length + 1}, layoutItem)
+                ? Object.assign(layoutItem, {h: record.kv.length + 1})
                 : undefined
             }, [
-              h(Document, doc)
+              h(Document, {_id: record._id})
             ])
           })
         )
       ])
     )
   }
-
-  saveLayout (layout) {
-    db.put({
-      _id: 'layout',
-      _rev: this.layout_rev,
-      layout: layout
-    })
-      .then(r => {
-        console.log('saved layout', r)
-        this.layout_rev = r.rev
-      })
-      .catch(e => console.log('error saving layout', e))
-  }
 }
 
-const doc = styled.div`
+const docDiv = styled.div`
   background: white;
   height: 100%;
-  font-family: monospace;
   overflow: hidden;
+  border: 2px solid papayawhip;
 
   table {
-    width: 96%;
-    margin: 0 2%;
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+    border-spacing: 0;
   }
 
   td, th {
-    height: 24px;
+    height: 30px;
+    border: 1px solid #dbdbdb;
   }
 
   th {
-    position: relative;
-    text-align: right;
-
-    &:after {
-      position: absolute;
-      right: 0;
-      content: ": "
+    input {
+      text-align: right;
     }
   }
 
@@ -142,7 +111,12 @@ const doc = styled.div`
     width: 100%;
     height: 100%;
     border: none;
-    padding: 0;
+    padding: 0 5px;
+    font-family: monospace;
+
+    &:focus {
+      background-color: #def6ff;
+    }
   }
 `
 
@@ -150,33 +124,58 @@ class Document extends React.Component {
   constructor (props) {
     super(props)
 
-    console.log('props', this.props)
-    this.state = {
-      kv: List(
-        this.props.kv
-          .map(([k, v]) => new KV({k, v}))
-      )
-    }
+    this.cursor = tree.select(['records', this.props._id])
+  }
+
+  componentDidMount () {
+    this.cursor.on('update', () => { this.forceUpdate() })
+  }
+
+  componentWillUnmount () {
+    this.cursor.tree && this.cursor.release()
+  }
+
+  shouldComponentUpdate (nextProps) {
+    return this.props._id !== nextProps._id
   }
 
   render () {
+    let record = this.cursor.get() || {_id: this.props._id, kv: []}
+
     return (
-      h(doc, [
-        h('table', {title: this.props._id}, [
-          h('tbody', {}, this.state.kv
-            .push(new KV())
-            .map((kv, i) =>
+      h(docDiv, [
+        h('table', {title: record._id}, [
+          h('tbody', {}, record
+            .kv
+            .concat([['', '']])
+            .map(([k, v], i) => console.log('kv', k, v, i) ||
               h('tr', {key: i}, [
                 h('th', [
                   h('input', {
-                    value: kv.get('k'),
-                    onChange: e => this.set(i, 'k', e.target.value)
+                    value: k,
+                    onChange: e => {
+                      if (record.kv.length > i) {
+                        record.kv[i][0] = e.target.value
+                      } else {
+                        record.kv.push([e.target.value, ''])
+                      }
+                      this.cursor.set(record)
+                      tree.commit()
+                    }
                   })
                 ]),
                 h('td', [
                   h('input', {
-                    value: kv.get('v'),
-                    onChange: e => this.set(i, 'v', e.target.value)
+                    value: v,
+                    onChange: e => {
+                      if (record.kv.length > i) {
+                        record.kv[i][1] = e.target.value
+                      } else {
+                        record.kv.push(['', e.target.value])
+                      }
+                      this.cursor.set(record)
+                      tree.commit()
+                    }
                   })
                 ])
               ])
@@ -185,32 +184,6 @@ class Document extends React.Component {
         ])
       ])
     )
-  }
-
-  set (index, what, value) {
-    console.log('set', index, what, value)
-
-    let kv = this.state.kv
-      .update(index, new KV(), kv => kv.set(what, value))
-
-    clearTimeout(this._saveTimeout)
-
-    this.setState({
-      kv: kv
-    }, () => {
-      // save doc
-      this._saveTimeout = setTimeout(() => {
-        db.put({
-          _id: this.props._id,
-          _rev: this.props._rev,
-          kv: kv
-            .map(kv => [kv.get('k'), kv.get('v')])
-            .toArray()
-        })
-          .then(r => console.log('doc saved', r))
-          .catch(e => console.log('error saving doc', e))
-      }, 30000)
-    })
   }
 }
 
