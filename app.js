@@ -5,7 +5,7 @@ const h = require('react-hyperscript')
 const styled = require('styled-components').default
 const hashbow = require('hashbow')
 const RGL = require('react-grid-layout')
-const { getLayoutItem } = require('react-grid-layout/build/utils')
+const { getLayoutItem, compactItem } = require('react-grid-layout/build/utils')
 
 const ReactGridLayout = RGL.WidthProvider(RGL)
 
@@ -18,6 +18,12 @@ class App extends React.Component {
     this.recordsCursor = tree.select('records')
     this.draggableCursor = tree.select('draggable')
     this.hasPendingCursor = tree.select('hasPending')
+
+    this.baseLayout = {
+      minW: 3,
+      w: 3,
+      minH: 1
+    }
   }
 
   componentDidMount () {
@@ -62,7 +68,7 @@ class App extends React.Component {
           isDraggable: draggable,
           items: 40,
           rowHeight: 30,
-          cols: 12,
+          cols: 36,
           onLayoutChange: l => tree.set(['layout', 'layout'], l),
           containerPadding: [0, 0],
           margin: [0, 0],
@@ -80,16 +86,19 @@ class App extends React.Component {
             let layoutItem = getLayoutItem(layout, record._id)
             console.log('item', record._id, 'height', record.kv.length + 1)
 
+            let height = record.kv.length + 1
+            let actualLayout = Object.assign(
+              {x: 0, y: 0},
+              layoutItem,
+              this.baseLayout,
+              {h: height, maxH: height}
+            )
+
             return h('div', {
               key: record._id,
               'data-grid': layoutItem
-                ? Object.assign(layoutItem, {
-                  h: record.kv.length + 1,
-                  minW: 1,
-                  minH: 1,
-                  maxH: record.kv.length + 1
-                })
-                : undefined
+                ? actualLayout
+                : compactItem(layout, actualLayout, 'horizontal', 36, layout)
             }, [
               h(Document, {_id: record._id})
             ])
