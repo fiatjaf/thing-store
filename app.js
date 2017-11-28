@@ -17,29 +17,28 @@ class App extends React.Component {
 
     this.recordsCursor = tree.select('records')
     this.draggableCursor = tree.select('draggable')
+    this.hasPendingCursor = tree.select('hasPending')
   }
 
   componentDidMount () {
-    this.recordsCursor.on('update', () => {
-      this.forceUpdate()
-    })
+    this.recordsCursor.on('update', () => { this.forceUpdate() })
     this.draggableCursor.on('update', () => { this.forceUpdate() })
+    this.hasPendingCursor.on('update', () => { this.forceUpdate() })
   }
 
   componentWillUnmount () {
     this.recordsCursor.release()
     this.draggableCursor.release()
+    this.hasPendingCursor.release()
   }
 
   render () {
-    let {layout, draggable, records, pending} = tree.project({
+    let {layout, draggable, records, hasPending} = tree.project({
       layout: ['layout', 'layout'],
       draggable: ['draggable'],
       records: ['records'],
-      pending: ['pendingSaves']
+      hasPending: ['hasPending']
     })
-
-    let hasPending = Object.keys(pending).length
 
     return (
       h('div', [

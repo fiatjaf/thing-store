@@ -17,12 +17,20 @@ var tree = new Baobab({
   },
   draggable: false,
   records: {},
-  pendingSaves: {}
+  pendingSaves: {},
+  hasPending: Baobab.monkey({
+    cursors: {
+      pendingSaves: ['pendingSaves']
+    },
+    get: ({pendingSaves}) => {
+      return Object.keys(pendingSaves).length > 0
+    }
+  })
 }, {
   immutable: false,
   persistent: true, // false?
   asynchronous: true, // false?
-  monkeyBusiness: false,
+  monkeyBusiness: true,
   pure: false
 })
 
@@ -40,16 +48,18 @@ tree.select('records').on('update', e => {
 })
 tree.select('layout').on('update', e => {
   console.log('layout updated', e.data.currentData)
-
-  // schedule layout update on pouchdb
-  tree.set(['pendingSaves', 'layout'], e.data.currentData)
+  // since the layout changes too much and may set up an infinite recursion of
+  // actions, we will fetch its current state on save time.
 })
 
 // ---
 
 module.exports.saveToPouch = function () {
   let byid = tree.get('pendingSaves')
-  let docslist = Object.keys(byid).map(_id => byid[_id])
+  var docslist = Object.keys(byid).map(_id => byid[_id])
+
+  // always save current layout
+  docslist.push(tree.get('layout'))
 
   return db.bulkDocs(docslist)
     .then(r => {
@@ -67,5 +77,7 @@ db.allDocs({include_docs: true})
       } else if (doc._id.slice(0, 2) === 'r-') {
         tree.set(['records', doc._id], doc)
       }
+      tree.commit()
+      tree.set('pendingSaves', {})
     })
   )
