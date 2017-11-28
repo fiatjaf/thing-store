@@ -54,8 +54,9 @@ class App extends React.Component {
           rowHeight: 30,
           cols: 12,
           onLayoutChange: l => tree.set(['layout', 'layout'], l),
-          containerPadding: [12, 12],
+          containerPadding: [0, 0],
           margin: [0, 0],
+          compactType: null,
           autoSize: false,
           layout: layout
         }, Object.keys(records)
@@ -72,7 +73,12 @@ class App extends React.Component {
             return h('div', {
               key: record._id,
               'data-grid': layoutItem
-                ? Object.assign(layoutItem, {h: record.kv.length + 1})
+                ? Object.assign(layoutItem, {
+                  h: record.kv.length + 1,
+                  minW: 1,
+                  minH: 1,
+                  maxH: record.kv.length + 1
+                })
                 : undefined
             }, [
               h(Document, {_id: record._id})
@@ -117,6 +123,13 @@ const docDiv = styled.div`A
 
     input {
       text-align: right;
+      padding-right: 4px;
+    }
+  }
+
+  td {
+    input {
+      padding-left: 5px;
     }
   }
 
@@ -124,9 +137,8 @@ const docDiv = styled.div`A
     width: 100%;
     height: 100%;
     border: none;
-    padding-right: 4px;
     font-family: monospace;
-    background-color: inherir;
+    background-color: inherit;
 
     &:focus {
       background-color: #def6ff;
