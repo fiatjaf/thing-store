@@ -57,10 +57,10 @@ html, body {
   .react-resizable-handle {
     position: absolute;
     width: 20px;
-    height: 20px;
+    top: 0;
     bottom: 0;
     right: 0;
     padding: 0 3px 3px 0;
-    cursor: se-resize;
+    cursor: e-resize;
   }
 }
