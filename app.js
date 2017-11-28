@@ -84,7 +84,6 @@ class App extends React.Component {
           })
           .map(record => {
             let layoutItem = getLayoutItem(layout, record._id)
-            console.log('item', record._id, 'height', record.kv.length + 1)
 
             let height = record.kv.length + 1
             let actualLayout = Object.assign(
@@ -113,7 +112,6 @@ const docDiv = styled.div`A
   height: 100%;
   overflow: hidden;
   border: 2px solid ${props => hashbow(props.id)};
-  background-color: 2px solid ${props => hashbow(props.id)};
 
   table {
     background-color: white;
@@ -142,7 +140,7 @@ const docDiv = styled.div`A
 
     input {
       text-align: right;
-      padding-right: 4px;
+      padding-right: 6px;
     }
   }
 
@@ -173,7 +171,10 @@ class Document extends React.Component {
   }
 
   componentDidMount () {
-    this.cursor.on('update', () => { this.forceUpdate() })
+    this.cursor.on('update', e => {
+      console.log('record updated', e.data.currentData)
+      this.forceUpdate()
+    })
   }
 
   componentWillUnmount () {
@@ -188,15 +189,54 @@ class Document extends React.Component {
     let record = this.cursor.get() || {_id: this.props._id, kv: []}
 
     return (
-      h(docDiv, {id: record._id}, [
+      h(docDiv, {
+        id: record._id,
+        onMouseDown: e => {
+          // clicking here while editing a formula elsewhere
+          // should add it as reference.
+
+          let formulaEditing = tree.get('formulaEditing')
+          if (formulaEditing) {
+            let [targetId, targetIndex] = formulaEditing
+            if (targetId === record._id) return
+
+            let input = document.querySelectorAll(`#${targetId} input.v`)[targetIndex]
+            let start = input.selectionStart
+            let end = input.selectionEnd
+
+            if (start > 0) {
+              e.preventDefault()
+              e.stopPropagation()
+
+              let valueToInclude = '<' + record._id.slice(2) + '>'
+              let newValue = input.value.slice(0, start) +
+                valueToInclude +
+                input.value.slice(end)
+
+              tree.set(['records', targetId, 'kv', targetIndex, 1], newValue)
+              tree.commit()
+
+              setTimeout(() => {
+                if (start === end) {
+                  input.selectionStart =
+                  input.selectionEnd =
+                    start + valueToInclude.length
+                } else {
+                  input.selectionEnd = start + valueToInclude.length
+                }
+              }, 1)
+            }
+          }
+        }
+      }, [
         h('table', {title: record._id}, [
           h('tbody', {}, record
             .kv
             .concat([['', '']])
-            .map(([k, v], i) => console.log('kv', k, v, i) ||
+            .map(([k, v], i) =>
               h('tr', {key: i, id: k}, [
                 h('th', [
-                  h('input', {
+                  h('input.k', {
                     value: k,
                     onChange: e => {
                       if (record.kv.length > i) {
@@ -210,16 +250,33 @@ class Document extends React.Component {
                   })
                 ]),
                 h('td', [
-                  h('input', {
+                  h('input.v', {
                     value: v,
-                    onChange: e => {
-                      if (record.kv.length > i) {
-                        record.kv[i][1] = e.target.value
+                    onFocus: e => {
+                      if (e.target.value[0] === '=') {
+                        tree.set('formulaEditing', [record._id, i])
                       } else {
-                        record.kv.push(['', e.target.value])
+                        tree.set('formulaEditing', null)
+                      }
+                    },
+                    onChange: e => {
+                      let value = e.target.value
+
+                      if (record.kv.length > i) {
+                        record.kv[i][1] = value
+                      } else {
+                        record.kv.push(['', value])
                       }
                       this.cursor.apply(() => record)
                       tree.commit()
+
+                      setTimeout(() => {
+                        if (value[0] === '=') {
+                          tree.set('formulaEditing', [record._id, i])
+                        } else {
+                          tree.set('formulaEditing', null)
+                        }
+                      }, 1)
                     }
                   })
                 ])

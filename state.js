@@ -16,7 +16,11 @@ var tree = new Baobab({
     layout: []
   },
   draggable: false,
+
   records: {},
+
+  formulaEditing: null,
+
   pendingSaves: {},
   hasPending: Baobab.monkey({
     cursors: {
@@ -36,20 +40,17 @@ var tree = new Baobab({
 
 module.exports.tree = tree
 
-tree.select('records').on('update', e => {
-  console.log('records updated', e.data.currentData)
+// tree.on('write', function (e) {
+//   console.log('write', e)
+// })
 
+tree.select('records').on('update', e => {
   // schedule record update on pouchdb
   for (let _id in e.data.currentData) {
     if (e.data.previousData[_id] !== e.data.currentData[_id]) {
       tree.set(['pendingSaves', _id], e.data.currentData[_id])
     }
   }
-})
-tree.select('layout').on('update', e => {
-  console.log('layout updated', e.data.currentData)
-  // since the layout changes too much and may set up an infinite recursion of
-  // actions, we will fetch its current state on save time.
 })
 
 // ---
