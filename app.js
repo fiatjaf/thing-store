@@ -1,6 +1,5 @@
 const React = require('react')
 const render = require('react-dom').render
-const cuid = require('cuid')
 const h = require('react-hyperscript')
 const styled = require('styled-components').default
 const hashbow = require('hashbow')
@@ -51,12 +50,12 @@ class App extends React.Component {
         h('.columns.is-mobile', [
           h('.column', 'data at "~"'),
           h('.column', [
-            h('button.button.is-success', {
+            h('button.button.is-info', {
               onClick: () => tree.set('draggable', !draggable)
             }, draggable ? 'done' : 'rearrange')
           ]),
           h('.column', [
-            h('button.button.is-info', {
+            h('button.button.is-success', {
               onClick: () => saveToPouch()
                 .then(r => console.log('saved to pouch', r))
                 .catch(e => console.log('failed saving to pouch', e)),
@@ -67,7 +66,7 @@ class App extends React.Component {
         h(ReactGridLayout, {
           isDraggable: draggable,
           items: 40,
-          rowHeight: 30,
+          rowHeight: 28,
           cols: 36,
           onLayoutChange: l => tree.set(['layout', 'layout'], l),
           containerPadding: [0, 0],
@@ -77,17 +76,12 @@ class App extends React.Component {
           layout: layout
         }, Object.keys(records)
           .map(_id => records[_id])
-          .concat({
-            /* a new record will be created when this blank is edited */ 
-            _id: 'r-' + cuid.slug(),
-            kv: []
-          })
           .map(record => {
             let layoutItem = getLayoutItem(layout, record._id)
 
             let height = record.kv.length + 1
             let actualLayout = Object.assign(
-              {x: 0, y: 0},
+              {x: 33, y: 0},
               layoutItem,
               this.baseLayout,
               {h: height, maxH: height}
@@ -114,7 +108,7 @@ const docDiv = styled.div`A
   border: 2px solid ${props => hashbow(props.id)};
 
   table {
-    background-color: white;
+    background-color: ${props => props.focused ? 'white' : 'papayawhip'};
     width: 100%;
     margin: 0;
     border-collapse: collapse;
@@ -122,7 +116,7 @@ const docDiv = styled.div`A
   }
 
   td, th {
-    height: 30px;
+    height: 28px;
     border: 1px solid #dbdbdb;
   }
 
@@ -130,7 +124,7 @@ const docDiv = styled.div`A
     width: 39%;
     max-width: 100px;
     position: relative;
-    background-color: #f6f1f6;
+    background-color: ${props => props.focused ? '#f39d5d' : '#f6f1f6'};
 
     &:after {
       content: ": ";
@@ -141,12 +135,20 @@ const docDiv = styled.div`A
     input {
       text-align: right;
       padding-right: 6px;
+
+      &:focus {
+        background-color: #ffe8d7;
+      }
     }
   }
 
   td {
     input {
       padding-left: 5px;
+
+      &:focus {
+        background-color: #def6ff;
+      }
     }
   }
 
@@ -156,10 +158,6 @@ const docDiv = styled.div`A
     border: none;
     font-family: monospace;
     background-color: inherit;
-
-    &:focus {
-      background-color: #def6ff;
-    }
   }
 `
 
@@ -191,10 +189,10 @@ class Document extends React.Component {
     return (
       h(docDiv, {
         id: record._id,
+        focused: record.focused,
         onMouseDown: e => {
           // clicking here while editing a formula elsewhere
           // should add it as reference.
-
           let formulaEditing = tree.get('formulaEditing')
           if (formulaEditing) {
             let [targetId, targetIndex] = formulaEditing
@@ -225,8 +223,18 @@ class Document extends React.Component {
                   input.selectionEnd = start + valueToInclude.length
                 }
               }, 1)
+
+              return
             }
           }
+
+          // normally, clicking here should "focus" this record
+          this.cursor.set('focused', record._id)
+          let prevFocused = tree.get('focused')
+          if (prevFocused && prevFocused !== record._id) {
+            tree.unset(['records', prevFocused, 'focused'])
+          }
+          tree.set('focused', record._id)
         }
       }, [
         h('table', {title: record._id}, [
@@ -244,7 +252,7 @@ class Document extends React.Component {
                       } else {
                         record.kv.push([e.target.value, ''])
                       }
-                      this.cursor.apply(() => record)
+                      this.cursor.set(record)
                       tree.commit()
                     }
                   })
@@ -267,7 +275,7 @@ class Document extends React.Component {
                       } else {
                         record.kv.push(['', value])
                       }
-                      this.cursor.apply(() => record)
+                      this.cursor.set(record)
                       tree.commit()
 
                       setTimeout(() => {
