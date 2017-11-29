@@ -95,7 +95,10 @@ module.exports.saveToPouch = function () {
     })
 
   // always save current layout
-  docslist.push(tree.get('layout'))
+  var ldoc = tree.get('layout')
+  ldoc.layout = ldoc['live-layout'] || ldoc['layout']
+  delete ldoc['live-layout']
+  docslist.push(ldoc)
 
   return db.bulkDocs(docslist)
     .then(r => {

@@ -9,9 +9,10 @@ $info: #f567ed;
 }
 
 html, body {
-
   background-color: #e8d29e;
   padding: 20px;
+  min-height: 100vh;
+  overflow: auto;
 }
 
 #main {

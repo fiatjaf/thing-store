@@ -68,7 +68,7 @@ class App extends React.Component {
           items: 40,
           rowHeight: 28,
           cols: 36,
-          onLayoutChange: l => tree.set(['layout', 'layout'], l),
+          onLayoutChange: l => tree.set(['layout', 'live-layout'], l),
           containerPadding: [0, 0],
           margin: [0, 0],
           compactType: null,
@@ -81,9 +81,9 @@ class App extends React.Component {
 
             let height = record.kv.length + 1
             let actualLayout = Object.assign(
-              {x: 33, y: 0},
-              layoutItem,
+              {x: 33, y: 0, i: record._id},
               this.baseLayout,
+              layoutItem,
               {h: height, maxH: height}
             )
 
