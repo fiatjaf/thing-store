@@ -9,6 +9,7 @@ const { getLayoutItem, compactItem } = require('react-grid-layout/build/utils')
 const ReactGridLayout = RGL.WidthProvider(RGL)
 
 const { tree, saveToPouch } = require('./state')
+const { calc } = require('./calc')
 
 class App extends React.Component {
   constructor () {
@@ -81,7 +82,7 @@ class App extends React.Component {
 
             let height = record.kv.length + 1
             let actualLayout = Object.assign(
-              {x: 33, y: 0, i: record._id},
+              {x: 33, y: 12, i: record._id},
               this.baseLayout,
               layoutItem,
               {h: height, maxH: height}
@@ -191,43 +192,6 @@ class Document extends React.Component {
         id: record._id,
         focused: record.focused,
         onMouseDown: e => {
-          // clicking here while editing a formula elsewhere
-          // should add it as reference.
-          let formulaEditing = tree.get('formulaEditing')
-          if (formulaEditing) {
-            let [targetId, targetIndex] = formulaEditing
-            if (targetId === record._id) return
-
-            let input = document.querySelectorAll(`#${targetId} input.v`)[targetIndex]
-            let start = input.selectionStart
-            let end = input.selectionEnd
-
-            if (start > 0) {
-              e.preventDefault()
-              e.stopPropagation()
-
-              let valueToInclude = '<' + record._id.slice(2) + '>'
-              let newValue = input.value.slice(0, start) +
-                valueToInclude +
-                input.value.slice(end)
-
-              tree.set(['records', targetId, 'kv', targetIndex, 1], newValue)
-              tree.commit()
-
-              setTimeout(() => {
-                if (start === end) {
-                  input.selectionStart =
-                  input.selectionEnd =
-                    start + valueToInclude.length
-                } else {
-                  input.selectionEnd = start + valueToInclude.length
-                }
-              }, 1)
-
-              return
-            }
-          }
-
           // normally, clicking here should "focus" this record
           this.cursor.set('focused', record._id)
           let prevFocused = tree.get('focused')
@@ -258,35 +222,22 @@ class Document extends React.Component {
                   })
                 ]),
                 h('td', [
-                  h('input.v', {
-                    value: v,
-                    onFocus: e => {
-                      if (e.target.value[0] === '=') {
-                        tree.set('formulaEditing', [record._id, i])
-                      } else {
-                        tree.set('formulaEditing', null)
-                      }
-                    },
-                    onChange: e => {
-                      let value = e.target.value
+                  record.focused
+                    ? h('input.v', {
+                      value: v,
+                      onChange: e => {
+                        let value = e.target.value
 
-                      if (record.kv.length > i) {
-                        record.kv[i][1] = value
-                      } else {
-                        record.kv.push(['', value])
-                      }
-                      this.cursor.set(record)
-                      tree.commit()
-
-                      setTimeout(() => {
-                        if (value[0] === '=') {
-                          tree.set('formulaEditing', [record._id, i])
+                        if (record.kv.length > i) {
+                          record.kv[i][1] = value
                         } else {
-                          tree.set('formulaEditing', null)
+                          record.kv.push(['', value])
                         }
-                      }, 1)
-                    }
-                  })
+                        this.cursor.set(record)
+                        tree.commit()
+                      }
+                    })
+                    : calc(v)
                 ])
               ])
             )

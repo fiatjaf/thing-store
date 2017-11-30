@@ -9,13 +9,13 @@ module.exports.db = db
 // ---
 
 const Baobab = require('baobab')
-const cuid = require('cuid')
+const { id } = require('./helpers')
 
-let blankId = 'r-' + cuid.slug()
+let blankId = id('r')
 
 var tree = new Baobab({
   layout: {
-    _id: 'layout',
+    _id: ':layout',
     layout: []
   },
   draggable: false,
@@ -29,7 +29,6 @@ var tree = new Baobab({
   },
 
   focused: null,
-  formulaEditing: null,
 
   pendingSaves: {},
   hasPending: Baobab.monkey({
@@ -63,7 +62,7 @@ tree.select('records').on('update', e => {
 
       // if this was the blank record, "unblank" it and create a new blank record
       if (doc._id === currentBlank && doc.kv.length > 0) {
-        let nextBlankId = 'r-' + cuid.slug()
+        let nextBlankId = id('r')
 
         tree.set(['records', nextBlankId], {
           _id: nextBlankId,
@@ -111,9 +110,9 @@ db.allDocs({include_docs: true})
   .then(res => res.rows
     .map(r => r.doc)
     .map(doc => {
-      if (doc._id === 'layout') {
+      if (doc._id === ':layout') {
         tree.set('layout', doc)
-      } else if (doc._id.slice(0, 2) === 'r-') {
+      } else if (doc._id.slice[0] === 'r') {
         tree.set(['records', doc._id], doc)
       }
       tree.commit()
