@@ -167,17 +167,42 @@ class Document extends React.Component {
     super(props)
 
     this.cursor = tree.select(['records', this.props._id])
+    this.calc = tree.select(['calcResults', this.props._id])
+    this.focused = tree.select('focused')
   }
 
   componentDidMount () {
     this.cursor.on('update', e => {
-      console.log('record updated', e.data.currentData)
+      console.log('record updated: ' + this.props._id, e.data.currentData)
       this.forceUpdate()
+    })
+
+    this.calc.on('update', e => {
+      console.log('calc results updated: ' + this.props._id, e.data.currentData)
+      this.forceUpdate()
+    })
+
+    this.focused.on('update', e => {
+      console.log(this.props._id + ' focused state change', e.data.currentData)
+      if (this.props._id === e.data.currentData ||
+          this.props._id === e.data.previousData) {
+        this.forceUpdate()
+
+        // recalc formulas on focus out
+        if (e.data.currentData !== this.props._id) {
+          this.cursor.get().kv.forEach(([_, formula], i) => {
+            calc(formula)
+              .then(result => this.calc.set(i, result))
+              .catch(e => console.log(`failed to calc(${formula})`, e))
+          })
+        }
+      }
     })
   }
 
   componentWillUnmount () {
     this.cursor.tree && this.cursor.release()
+    this.calc.tree && this.calc.release()
   }
 
   shouldComponentUpdate (nextProps) {
@@ -185,20 +210,17 @@ class Document extends React.Component {
   }
 
   render () {
-    let record = this.cursor.get() || {_id: this.props._id, kv: []}
+    let record = this.cursor.get()
+    let focused = this.focused.get() === record._id
+    let calcResults = this.calc.get()
 
     return (
       h(docDiv, {
         id: record._id,
-        focused: record.focused,
+        focused: focused,
         onMouseDown: e => {
           // normally, clicking here should "focus" this record
-          this.cursor.set('focused', record._id)
-          let prevFocused = tree.get('focused')
-          if (prevFocused && prevFocused !== record._id) {
-            tree.unset(['records', prevFocused, 'focused'])
-          }
-          tree.set('focused', record._id)
+          if (!focused) tree.set('focused', record._id)
         }
       }, [
         h('table', {title: record._id}, [
@@ -222,7 +244,7 @@ class Document extends React.Component {
                   })
                 ]),
                 h('td', [
-                  record.focused
+                  focused
                     ? h('input.v', {
                       value: v,
                       onChange: e => {
@@ -237,7 +259,7 @@ class Document extends React.Component {
                         tree.commit()
                       }
                     })
-                    : calc(v)
+                    : calcResults[i]
                 ])
               ])
             )

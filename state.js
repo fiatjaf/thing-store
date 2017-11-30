@@ -20,14 +20,17 @@ var tree = new Baobab({
   },
   draggable: false,
 
-  blank: blankId,
   records: {
     [blankId]: {
       _id: blankId,
       kv: []
     }
   },
+  calcResults: {
+    [blankId]: []
+  },
 
+  blank: blankId,
   focused: null,
 
   pendingSaves: {},
@@ -68,6 +71,7 @@ tree.select('records').on('update', e => {
           _id: nextBlankId,
           kv: []
         })
+        tree.set(['calcResults', nextBlankId], [])
         tree.commit()
 
         // only now that we've synchronously added the new blank record
@@ -88,16 +92,14 @@ module.exports.saveToPouch = function () {
   let byid = tree.get('pendingSaves')
   var docslist = Object.keys(byid)
     .map(_id => byid[_id])
-    .map(doc => {
-      delete doc.focused
-      return doc
-    })
 
-  // always save current layout
+  // always save current layout if it has changed
   var ldoc = tree.get('layout')
-  ldoc.layout = ldoc['live-layout'] || ldoc['layout']
-  delete ldoc['live-layout']
-  docslist.push(ldoc)
+  if (ldoc['live-layout']) {
+    ldoc.layout = ldoc['live-layout']
+    delete ldoc['live-layout']
+    docslist.push(ldoc)
+  }
 
   return db.bulkDocs(docslist)
     .then(r => {
@@ -114,6 +116,7 @@ db.allDocs({include_docs: true})
         tree.set('layout', doc)
       } else if (doc._id.slice[0] === 'r') {
         tree.set(['records', doc._id], doc)
+        tree.set(['calcResults', doc._id], doc.kv)
       }
       tree.commit()
       tree.set('pendingSaves', {})
