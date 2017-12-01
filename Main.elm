@@ -4,7 +4,7 @@ import Html exposing
 import Html.Lazy exposing (..)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick, onInput)
-import Dict exposing (Dict)
+import Dict exposing (Dict, insert, get)
 import Platform.Sub as Sub
 import Json.Decode as J
 import Mouse exposing (Position)
@@ -35,7 +35,9 @@ type alias Model =
   { records : Records
   , blank_id : String
   , next_blank_id : String
+  , dragging : Maybe String
   }
+
 
 init : Flags -> (Model, Cmd Msg)
 init flags =
@@ -47,6 +49,7 @@ init flags =
     ) 
     flags.blank
     ""
+    Nothing
   , Cmd.batch
     [ requestId ()
     ]
@@ -58,12 +61,30 @@ init flags =
 
 type Msg
   = NextBlankId String
+  | RecordAction String RecordMsg
   | Noop
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     NextBlankId id -> ( { model | next_blank_id = id }, Cmd.none )
+    RecordAction id rmsg ->
+      case get id model.records of
+        Nothing -> ( model, Cmd.none )
+        Just oldr ->
+          let
+            (r, rcmd) = Record.update rmsg oldr
+            (m, mcmd) = case rmsg of 
+              DragStart -> ( { model | dragging = Just id }, Cmd.none )
+              DragEnd pos ->
+                ( { model | dragging = Nothing }
+                , queueRecord r
+                )
+              _ -> ( model, Cmd.none )
+          in 
+            ( { m | records = model.records |> insert id r }
+            , Cmd.batch [ mcmd, Cmd.map (RecordAction id) rcmd ]
+            )
     Noop -> ( model, Cmd.none )
 
 
@@ -74,6 +95,13 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.batch
     [ gotId NextBlankId
+    , case model.dragging of
+      Nothing -> Sub.none
+      Just id ->
+        Sub.batch
+          [ Mouse.moves (RecordAction id << DragAt)
+          , Mouse.ups (RecordAction id << DragEnd)
+          ]
     ]
 
 
@@ -87,7 +115,7 @@ view model =
     , div []
       [ text <| "next id: " ++ model.next_blank_id
       ]
-    , div [ class "record-container" ] <|
-      List.map (lazy Record.view)
-        <| Dict.values model.records
+    , div [ class "record-container" ]
+      <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.view r))
+      <| Dict.toList model.records
     ]

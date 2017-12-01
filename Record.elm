@@ -6,8 +6,9 @@ import Html exposing
   , input
   )
 import Html.Attributes exposing (class, style)
-import Html.Events exposing (onClick, onInput)
-import Dict exposing (Dict)
+import Html.Events exposing (onMouseDown)
+import Dict exposing (Dict, insert, get)
+import Json.Decode as Decode
 import Mouse exposing (Position)
 
 import Helpers exposing (..)
@@ -32,18 +33,36 @@ add id records =
       id
       [ ("", "") ]
       [ "" ]
-      { x=23, y=18 }
+      { x = 200, y = 200 }
   in
-    Dict.insert id rec records
+    insert id rec records
+
+
+-- UPDATE
+
+
+type RecordMsg
+  = DragStart
+  | DragAt Position
+  | DragEnd Position
+
+
+update : RecordMsg -> Record -> (Record, Cmd RecordMsg)
+update msg record =
+  case msg of
+    DragStart -> ( record, Cmd.none )
+    DragAt pos -> ( { record | pos = Debug.log "pos" pos }, Cmd.none )
+    DragEnd pos -> ( record, Cmd.none )
 
 
 -- VIEW
 
 
-view : Record -> Html msg
+view : Record -> Html RecordMsg
 view rec =
   div
     [ class "record"
+    , onMouseDown DragStart
     , style
       [ "position" => "absolute"
       , "left" => px rec.pos.x
@@ -54,7 +73,7 @@ view rec =
       List.map viewKV rec.kv
     ]
 
-viewKV : ( String, String ) -> Html msg
+viewKV : ( String, String ) -> Html RecordMsg
 viewKV (k, v) =
   tr []
     [ th [] [ text k ]
