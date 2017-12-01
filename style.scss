@@ -9,59 +9,76 @@ $info: #f567ed;
 }
 
 html, body {
-  background-color: #e8d29e;
+  background-color: #e3f0d5;
   padding: 20px;
   min-height: 100vh;
   overflow: auto;
 }
 
-#main {
-  width: 100%;
-  min-height: 800px;
-}
-
-.react-grid-layout {
+.record-container {
   position: relative;
-  transition: height 200ms ease;
-  width: 1400px;
+  width: 800px;
+  height: 90vh;
+  background-color: #f0e5d5;
 }
 
-.react-grid-item {
-  box-sizing: border-box;
-  transition: all 200ms ease;
-  transition-property: left, top;
+.record {
+  overflow: hidden;
+  border: 2px solid cyan;
 
-  &.resizing {
-    z-index: 1;
-    will-change: width, height;
-    opacity: 0.9;
+  table {
+    background-color: papayawhip;
+    &.focused { background-color: white; }
+
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+    border-spacing: 0;
   }
-  &.cssTransforms {
-    transition-property: transform;
+
+  td, th {
+    height: 28px;
+    min-width: 50px;
+    border: 1px solid #dbdbdb;
   }
-  &.react-draggable-dragging {
-    transition: none;
-    z-index: 3;
-    will-change: transform;
+
+  th {
+    width: 39%;
+    max-width: 100px;
+    position: relative;
+    background-color: '#f6f1f6';
+
+    &:after {
+      content: ": ";
+      position: absolute;
+      right: 0;
+    }
+
+    input {
+      text-align: right;
+      padding-right: 6px;
+
+      &:focus {
+        background-color: #ffe8d7;
+      }
+    }
   }
-  &.react-grid-placeholder {
-    background: red;
-    opacity: 0.2;
-    transition-duration: 100ms;
-    z-index: 2;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    -o-user-select: none;
-    user-select: none;
+
+  td {
+    input {
+      padding-left: 5px;
+
+      &:focus {
+        background-color: #def6ff;
+      }
+    }
   }
-  .react-resizable-handle {
-    position: absolute;
-    width: 20px;
-    top: 0;
-    bottom: 0;
-    right: 0;
-    padding: 0 3px 3px 0;
-    cursor: e-resize;
+
+  input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    font-family: monospace;
+    background-color: inherit;
   }
 }
