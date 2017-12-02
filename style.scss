@@ -16,7 +16,7 @@ html, body {
 }
 
 .record-container {
-  /*position: relative;*/
+  position: relative;
   width: 800px;
   height: 90vh;
   background-color: #f0e5d5;
@@ -26,9 +26,12 @@ html, body {
   overflow: hidden;
   border: 2px solid cyan;
 
+  &.focused {
+    table { background-color: white; }
+  }
+
   table {
     background-color: papayawhip;
-    &.focused { background-color: white; }
 
     width: 100%;
     margin: 0;

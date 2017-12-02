@@ -2,7 +2,7 @@
 
 const PouchDB = require('pouchdb-core')
   .plugin(require('pouchdb-adapter-idb'))
-  .plugin(require('pouchdb-ensure'))
+const debounce = require('debounce')
 
 const db = new PouchDB('~')
 
@@ -17,8 +17,10 @@ db.allDocs({include_docs: true})
     .map(doc => ({
       id: doc._id,
       pos: doc.pos,
-      kv: doc.kv,
-      calc: doc.kv.map(() => '')
+      k: doc.kv.map(kv => kv[0]),
+      v: doc.kv.map(kv => kv[1]),
+      calc: doc.kv.map(() => ''),
+      focused: false
     }))
   )
   .then(records => {
@@ -36,19 +38,21 @@ function setupPorts (app) {
     app.ports.gotId.send(id('r'))
   })
 
-  app.ports.calc.subscribe(formula => {
+  let dCalc = debounce(([_id, idx, formula]) => {
     calc(formula)
       .then(res => {
-        app.ports.gotCalcResult.send()
+        console.log(_id, idx, res)
+        app.ports.gotCalcResult.send([_id, idx, res])
       })
       .catch(e => console.log(`error on calc(${formula})`, e))
-  })
+  }, 1000)
+  app.ports.calc.subscribe(dCalc)
 
   var queue = {}
   app.ports.queueRecord.subscribe(record => {
     queue[record.id] = {
       _id: record.id,
-      kv: record.kv,
+      kv: record.k.map((k, i) => [k, record.v[i]]),
       pos: record.pos
     }
 

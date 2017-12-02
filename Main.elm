@@ -1,9 +1,10 @@
 import Html exposing
   ( Html, text , div
+  , button
   )
 import Html.Lazy exposing (..)
 import Html.Attributes exposing (class)
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (onMouseDown)
 import Dict exposing (Dict, insert, get)
 import Platform.Sub as Sub
 import Json.Decode as J
@@ -35,7 +36,8 @@ type alias Model =
   { records : Records
   , blank_id : String
   , next_blank_id : String
-  , dragging : Maybe String
+  , dragging : Maybe ( String, Position )
+  , pending_saves : Int
   }
 
 
@@ -50,6 +52,7 @@ init flags =
     flags.blank
     ""
     Nothing
+    0
   , Cmd.batch
     [ requestId ()
     ]
@@ -61,6 +64,8 @@ init flags =
 
 type Msg
   = NextBlankId String
+  | PendingSaves Int
+  | UnfocusAll
   | RecordAction String RecordMsg
   | Noop
 
@@ -68,6 +73,11 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
     NextBlankId id -> ( { model | next_blank_id = id }, Cmd.none )
+    PendingSaves n -> ( { model | pending_saves = n }, Cmd.none )
+    UnfocusAll -> 
+      ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
+      , Cmd.none
+      )
     RecordAction id rmsg ->
       case get id model.records of
         Nothing -> ( model, Cmd.none )
@@ -75,14 +85,51 @@ update msg model =
           let
             (r, rcmd) = Record.update rmsg oldr
             (m, mcmd) = case rmsg of 
-              DragStart -> ( { model | dragging = Just id }, Cmd.none )
+              DragStart pos -> ( { model | dragging = Just (id, pos) }, Cmd.none )
               DragEnd pos ->
                 ( { model | dragging = Nothing }
                 , queueRecord r
                 )
+              Focus -> if r.focused then ( model, Cmd.none ) else update UnfocusAll model
+              ChangeKey _ _ ->
+                if id == model.blank_id
+                then
+                  ( { model
+                      | records = model.records |> add model.next_blank_id
+                      , blank_id = model.next_blank_id
+                    }
+                  , Cmd.batch
+                    [ queueRecord r
+                    , requestId ()
+                    ]
+                  )
+                else
+                  ( model
+                  , queueRecord r
+                  )
+              ChangeValue idx v ->
+                if id == model.blank_id
+                then
+                  ( { model
+                      | records = model.records |> add model.next_blank_id
+                      , blank_id = model.next_blank_id
+                    }
+                  , Cmd.batch
+                    [ queueRecord r
+                    , calc (id, idx, v)
+                    , requestId ()
+                    ]
+                  )
+                else
+                  ( model
+                  , Cmd.batch
+                    [ calc (id, idx, v)
+                    , queueRecord r
+                    ]
+                  )
               _ -> ( model, Cmd.none )
           in 
-            ( { m | records = model.records |> insert id r }
+            ( { m | records = m.records |> insert id r }
             , Cmd.batch [ mcmd, Cmd.map (RecordAction id) rcmd ]
             )
     Noop -> ( model, Cmd.none )
@@ -97,11 +144,16 @@ subscriptions model =
     [ gotId NextBlankId
     , case model.dragging of
       Nothing -> Sub.none
-      Just id ->
+      Just (id, start) ->
         Sub.batch
-          [ Mouse.moves (RecordAction id << DragAt)
+          [ Mouse.moves
+            (\pos ->
+              RecordAction id <| DragAt { x = pos.x - start.x, y = pos.y - start.y }
+            )
           , Mouse.ups (RecordAction id << DragEnd)
           ]
+    , gotPendingSaves PendingSaves
+    , gotCalcResult (\(id,idx,v) -> RecordAction id (CalcResult idx v))
     ]
 
 
@@ -112,10 +164,18 @@ view : Model -> Html Msg
 view model =
   div []
     [ text "data at \"~\""
-    , div []
-      [ text <| "next id: " ++ model.next_blank_id
+    , div [ class "columns is-mobile" ]
+      [ div [ class "column" ] [ text <| "next id: " ++ model.next_blank_id ]
+      , div [ class "column" ]
+        [ button [ class "button" ]
+          [ text <| "save " ++ (toString model.pending_saves) ++ " modified records"
+          ]
+        ]
       ]
-    , div [ class "record-container" ]
+    , div
+        [ class "record-container"
+        , onMouseDown UnfocusAll
+        ]
       <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.view r))
       <| Dict.toList model.records
     ]
