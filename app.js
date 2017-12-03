@@ -6,7 +6,7 @@ const debounce = require('debounce')
 
 const db = new PouchDB('~')
 
-const { calc } = require('./calc')
+const { calc, calcRecords, toSimplified } = require('./calc')
 const { id } = require('./helpers')
 
 var app
@@ -29,6 +29,11 @@ db.allDocs({include_docs: true})
       blank: id('r')
     })
 
+    // prepare records to use in formulas
+    records.forEach(record => {
+      calcRecords[record.id] = toSimplified(record)
+    })
+
     setupPorts(app)
   })
   .catch(e => console.log('initial docs loading failed', e))
@@ -39,12 +44,14 @@ function setupPorts (app) {
   })
 
   let dCalc = debounce(([_id, idx, formula]) => {
-    calc(formula)
-      .then(res => {
-        console.log(_id, idx, res)
-        app.ports.gotCalcResult.send([_id, idx, res])
-      })
-      .catch(e => console.log(`error on calc(${formula})`, e))
+    if (formula[0] === '=') {
+      calc(_id, formula)
+        .then(res => {
+          console.log(_id, idx, res)
+          app.ports.gotCalcResult.send([_id, idx, res])
+        })
+        .catch(e => console.log(`error on calc(${formula})`, e))
+    }
   }, 1000)
   app.ports.calc.subscribe(dCalc)
 
@@ -57,6 +64,9 @@ function setupPorts (app) {
     }
 
     app.ports.gotPendingSaves.send(Object.keys(queue).length)
+
+    // prepare record to use in formulas
+    calcRecords[record.id] = toSimplified(record)
   })
 
   app.ports.saveToPouch.subscribe(() => {

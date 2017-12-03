@@ -5,7 +5,7 @@ import Html exposing
   , table, tr, td, th
   , input
   )
-import Html.Attributes exposing (class, style, value, readonly)
+import Html.Attributes exposing (class, style, value, readonly, title)
 import Html.Events exposing (on, onMouseUp, onInput)
 import Dict exposing (Dict, insert, get)
 import Json.Decode as Decode
@@ -77,7 +77,11 @@ update msg record =
       in ( nnr, Cmd.none )
     ChangeValue idx newv ->
       let
-        nr = { record | v = record.v |> Array.set idx newv }
+        nr =
+          { record
+            | v = record.v |> Array.set idx newv
+            , calc = record.calc |> Array.set idx newv
+          }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
     Focus -> ( { record | focused = True }, Cmd.none )
@@ -105,6 +109,7 @@ view rec =
       , "left" => px rec.pos.x
       , "top" => px rec.pos.y
       ]
+    , title rec.id
     ]
     [ table [] <|
       List.map4 (viewKV rec.focused)
