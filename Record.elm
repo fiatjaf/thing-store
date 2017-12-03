@@ -5,8 +5,11 @@ import Html exposing
   , table, tr, td, th
   , input
   )
-import Html.Attributes exposing (class, style, value, readonly, title)
-import Html.Events exposing (on, onMouseUp, onInput)
+import Html.Attributes exposing
+  ( class, style, value, readonly
+  , title, attribute
+  )
+import Html.Events exposing (on, onWithOptions, onInput)
 import Dict exposing (Dict, insert, get)
 import Json.Decode as Decode
 import Array exposing (Array)
@@ -37,7 +40,7 @@ add id records =
       ( Array.fromList [ "" ] )
       ( Array.fromList [ "" ] )
       ( Array.fromList [ "" ] )
-      { x = 200, y = 200 }
+      { x = 0, y = 0 }
       False
   in
     insert id rec records
@@ -62,6 +65,7 @@ type RecordMsg
   | ChangeValue Int String
   | Focus
   | CalcResult Int String
+  | Noop
 
 
 update : RecordMsg -> Record -> (Record, Cmd RecordMsg)
@@ -89,6 +93,7 @@ update msg record =
       ( { record | calc = record.calc |> Array.set idx v }
       , Cmd.none
       )
+    Noop -> ( record, Cmd.none )
 
 
 -- VIEW
@@ -98,12 +103,24 @@ view : Record -> Html RecordMsg
 view rec =
   div
     [ class <| "record " ++ if rec.focused then "focused" else ""
-    , on "mousedown"
+    , if rec.focused then attribute "n" "" else on "mousedown"
+      -- dragging should only be triggered to an initially unfocused
+      -- record, otherwise it would mess up with the native editing
+      -- capabilities of <inputs>, like double-clicking to select all
+      -- and clicking-and-dragging to select some of the text.
       <| Decode.map DragStart
-        <| Decode.map2 Position
-          ( Decode.at [ "currentTarget", "parentNode", "offsetLeft" ] Decode.int )
-          ( Decode.at [ "currentTarget", "parentNode", "offsetTop" ] Decode.int )
-    , onMouseUp Focus
+        <| Decode.map2
+          (\x y -> { x = x - rec.pos.x, y = y - rec.pos.y } )
+          ( Decode.field "pageX" Decode.int )
+          ( Decode.field "pageY" Decode.int )
+    , if rec.focused
+      then onWithOptions -- when this is already focused, clicking it shouldn't trigger
+        "mousedown"      -- the global "UnfocusAll" event, but default shouldn't be
+        { stopPropagation = True, preventDefault = False } -- prevented, because it is
+        ( Decode.succeed Noop ) -- needed to change the focus between <input>s
+      else on -- when this is not focused, we want it to be focused no matter what.
+        "mouseup"
+        ( Decode.succeed Focus )
     , style
       [ "position" => "absolute"
       , "left" => px rec.pos.x

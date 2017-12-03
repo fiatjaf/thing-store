@@ -144,12 +144,10 @@ subscriptions model =
     [ gotId NextBlankId
     , case model.dragging of
       Nothing -> Sub.none
-      Just (id, start) ->
+      Just (id, base) ->
         Sub.batch
           [ Mouse.moves
-            (\pos ->
-              RecordAction id <| DragAt { x = pos.x - start.x, y = pos.y - start.y }
-            )
+            (\p -> RecordAction id <| DragAt { x = p.x - base.x, y = p.y - base.y })
           , Mouse.ups (RecordAction id << DragEnd)
           ]
     , gotPendingSaves PendingSaves
