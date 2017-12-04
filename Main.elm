@@ -107,7 +107,7 @@ update msg model =
                   ( model
                   , queueRecord r
                   )
-              ChangeValue idx v ->
+              ChangeValue idx k v ->
                 if id == model.blank_id
                 then
                   ( { model
@@ -115,15 +115,15 @@ update msg model =
                       , blank_id = model.next_blank_id
                     }
                   , Cmd.batch
-                    [ queueRecord r
-                    , calc (id, idx, v)
+                    [ changedValue (id, idx, k, v)
+                    , queueRecord r
                     , requestId ()
                     ]
                   )
                 else
                   ( model
                   , Cmd.batch
-                    [ calc (id, idx, v)
+                    [ changedValue (id, idx, k, v)
                     , queueRecord r
                     ]
                   )

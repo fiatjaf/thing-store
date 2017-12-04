@@ -62,7 +62,7 @@ type RecordMsg
   | DragAt Position
   | DragEnd Position
   | ChangeKey Int String
-  | ChangeValue Int String
+  | ChangeValue Int String String
   | Focus
   | CalcResult Int String
   | Noop
@@ -79,7 +79,7 @@ update msg record =
         nr = { record | k = record.k |> Array.set idx newk }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
-    ChangeValue idx newv ->
+    ChangeValue idx _ newv ->
       let
         nr =
           { record
@@ -149,7 +149,7 @@ viewKV focused idx k v calc =
     , td []
       [ input
         [ value <| if focused then v else calc
-        , onInput <| ChangeValue idx
+        , onInput <| ChangeValue idx k
         , readonly <| not focused
         ] []
       ]

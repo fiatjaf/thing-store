@@ -3,7 +3,7 @@ port module Ports exposing (..)
 import Record exposing (..)
 
 
-port calc : (String, Int, String) -> Cmd msg
+port changedValue : (String, Int, String, String) -> Cmd msg
 port queueRecord : Record -> Cmd msg
 port saveToPouch : () -> Cmd msg
 port requestId : () -> Cmd msg
