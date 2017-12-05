@@ -58,7 +58,7 @@ function setupPorts (app) {
           console.log(_id, idx, res)
           app.ports.gotCalcResult.send([_id, idx, res])
 
-          depGraph.vertexValue(_id)[key] = res
+          depGraph.vertexValue(_id)[key] = JSON.parse(res)
         })
         .catch(e => console.log(`error on calc(${value})`, e))
     } else {

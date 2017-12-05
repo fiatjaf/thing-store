@@ -7,7 +7,12 @@ function toSimplified (elmRecord) {
   for (let i = 0; i < elmRecord.k.length; i++) {
     let k = elmRecord.k[i]
     if (k.length) {
-      o[k] = elmRecord.calc[i]
+      let calcValue = elmRecord.calc[i]
+      try {
+        o[k] = JSON.parse(calcValue)
+      } catch (e) {
+        o[k] = calcValue
+      }
     }
   }
   return o
@@ -42,6 +47,7 @@ def filter(expr): $all | map(select(expr));
     let res = jq.raw(JSON.stringify(base), prelude + formula, ['-c'])
     return Promise.resolve(res)
   } catch (e) {
+    console.log(JSON.stringify(base), prelude + formula)
     return Promise.reject(e)
   }
 }
