@@ -56,7 +56,7 @@ function setupPorts (app) {
       waitCalc = calc(_id, formula)
         .then((res) => {
           console.log(_id, idx, res)
-          app.ports.gotCalcResult.send([_id, idx, JSON.stringify(res)])
+          app.ports.gotCalcResult.send([_id, idx, res])
 
           depGraph.vertexValue(_id)[key] = res
         })

@@ -7,7 +7,7 @@ function toSimplified (elmRecord) {
   for (let i = 0; i < elmRecord.k.length; i++) {
     let k = elmRecord.k[i]
     if (k.length) {
-      o[k] = elmRecord.v[i]
+      o[k] = elmRecord.calc[i]
     }
   }
   return o
@@ -16,23 +16,34 @@ function toSimplified (elmRecord) {
 module.exports.calc = function (currId, formula) {
   // build the object that will be passed to the formula
   var base = {}
+  var all = []
 
-  base._all = []
   for (let [_id, record] of depGraph.vertices()) {
     if (_id === ALL) continue
 
     let srecord = toSimplified(record)
     base[_id] = srecord
-    base._all.push(srecord)
+    all.push(srecord)
 
     for (let k in srecord) {
       base[k] = srecord[k]
     }
   }
 
+  // custom variables and functions
+  let prelude = `
+${JSON.stringify(all)} as $all |
+def find(expr): $all | map(select(expr)) | .[0];
+def filter(expr): $all | map(select(expr));
+  `
+
   // execute and return
-  let res = jq(base, formula)
-  return Promise.resolve(res)
+  try {
+    let res = jq.raw(JSON.stringify(base), prelude + formula, ['-c'])
+    return Promise.resolve(res)
+  } catch (e) {
+    return Promise.reject(e)
+  }
 }
 
 class DepGraph extends Graph {
@@ -68,7 +79,7 @@ class DepGraph extends Graph {
   }
 
   insertRefs (_id, formula) {
-    if (/(^| )\._all\b/.exec(formula)) {
+    if (/(^| )\$all\b/.exec(formula)) {
       this.addEdge(_id, ALL)
     }
 
