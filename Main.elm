@@ -116,7 +116,7 @@ update msg model =
                   ( model
                   , queueRecord r
                   )
-              ChangeValue idx k v ->
+              ChangeValue idx v ->
                 if id == model.blank_id
                 then
                   ( { model
@@ -124,7 +124,7 @@ update msg model =
                       , blank_id = model.next_blank_id
                     }
                   , Cmd.batch
-                    [ changedValue (id, idx, k, v)
+                    [ changedValue (id, idx, v)
                     , queueRecord r
                     , requestId ()
                     ]
@@ -132,14 +132,14 @@ update msg model =
                 else
                   ( model
                   , Cmd.batch
-                    [ changedValue (id, idx, k, v)
+                    [ changedValue (id, idx, v)
                     , queueRecord r
                     ]
                   )
               DeleteRow idx ->
                 ( model
                 , Cmd.batch
-                  [ changedValue (id, idx, r.k |> Array.get idx |> Maybe.withDefault "", "")
+                  [ changedValue (id, idx, "")
                   , queueRecord r
                   ]
                 )

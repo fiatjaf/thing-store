@@ -44,9 +44,10 @@ function setupPorts (app) {
     app.ports.gotId.send(id('r'))
   })
 
-  function changedValue ([_id, idx, key, value]) {
-    console.log('changed value', _id, idx, key, value)
+  function changedValue ([_id, idx, value]) {
+    console.log('changed value', _id, idx, value)
     depGraph.cleanRefs(_id)
+    depGraph.vertexValue(_id).v[idx] = value
 
     var waitCalc
     if (value[0] === '=') {
@@ -59,11 +60,11 @@ function setupPorts (app) {
           console.log(_id, idx, res)
           app.ports.gotCalcResult.send([_id, idx, res])
 
-          depGraph.vertexValue(_id)[key] = JSON.parse(res)
+          depGraph.vertexValue(_id).c[idx] = JSON.parse(res)
         })
         .catch(e => console.log(`error on calc(${value})`, e))
     } else {
-      depGraph.vertexValue(_id)[key] = value
+      depGraph.vertexValue(_id).c[idx] = value
       waitCalc = Promise.resolve()
     }
 
@@ -71,7 +72,7 @@ function setupPorts (app) {
       .then(() => {
         for (let [did, record] of depGraph.dependents(_id)) {
           for (let i = 0; i < record.k.length; i++) {
-            changedValue([did, i, record.k[i], record.v[i]])
+            changedValue([did, i, record.v[i]])
           }
         }
       })
