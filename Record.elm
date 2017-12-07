@@ -32,9 +32,7 @@ type alias Record =
   , focused : Bool
   }
 
-type alias Records = Dict String Record
-
-add : String -> Records -> Records
+add : String -> Dict String Record -> Dict String Record
 add id records =
   let
     rec = Record
@@ -129,8 +127,8 @@ update msg record =
 -- VIEW
 
 
-view : Record -> Html Msg
-view rec =
+viewFloating : Record -> Html Msg
+viewFloating rec =
   div
     [ class <| "record " ++ if rec.focused then "focused" else ""
     , if rec.focused then attribute "n" "" else on "mousedown"
@@ -191,3 +189,16 @@ viewKV rec idx k v c =
         ] []
       ]
     ]
+
+viewRow : List String -> Record -> Html Msg
+viewRow keys rec =
+  let
+    fetch key from =
+      case findIndex key (Array.toList rec.k) of
+        Nothing -> ""
+        Just idx -> Array.get idx from |> Maybe.withDefault ""
+  in
+    tr []
+      <| List.map (th [] << List.singleton << text)
+      <| List.map (\k -> if rec.focused then fetch k rec.v else fetch k rec.c)
+      <| keys

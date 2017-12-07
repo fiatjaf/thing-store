@@ -1,5 +1,6 @@
 import Html exposing
-  ( Html, text , div
+  ( Html, text, div
+  , table, tr, th, tbody, thead
   , button
   )
 import Html.Lazy exposing (..)
@@ -7,6 +8,7 @@ import Html.Attributes exposing (class)
 import Html.Events exposing (onMouseDown, onClick)
 import Dict exposing (Dict, insert, get)
 import Array exposing (Array)
+import Set exposing (Set)
 import Platform.Sub as Sub
 import Mouse exposing (Position)
 import ContextMenu exposing (ContextMenu)
@@ -35,12 +37,17 @@ type alias Flags =
 
 
 type alias Model =
-  { records : Records
+  { records : Dict String Record
   , next_id : String
+  , view : View
   , dragging : Maybe ( String, Position )
   , pending_saves : Int
   , context_menu : ContextMenu Context
   }
+
+type View
+  = Floating
+  | Table
 
 
 init : Flags -> (Model, Cmd Msg)
@@ -55,6 +62,7 @@ init flags =
         |> add flags.blank
       ) 
       ""
+      Floating
       Nothing
       0
       context_menu
@@ -72,6 +80,7 @@ type Msg
   = NextBlankId String
   | PendingSaves Int
   | UnfocusAll
+  | ChangeView View
   | NewRecord
   | CopyRecord String
   | RecordAction String Record.Msg
@@ -87,6 +96,7 @@ update msg model =
       ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
       , Cmd.none
       )
+    ChangeView v -> ( { model | view = v }, Cmd.none )
     NewRecord ->
       ( { model | records = model.records |> add model.next_id }
       , requestId ()
@@ -185,17 +195,45 @@ view model =
         [ button [ class "button", onClick NewRecord ] [ text "New" ]
         ]
       , div [ class "column" ]
+        [ button
+          [ class "button"
+          , onClick <| ChangeView (if model.view == Table then Floating else Table)
+          ] [ text "Toggle view" ]
+        ]
+      , div [ class "column" ]
         [ button [ class "button" ]
           [ text <| "save " ++ (toString model.pending_saves) ++ " modified records"
           ]
         ]
       ]
     , div
-        [ class "record-container"
-        , onMouseDown UnfocusAll
-        ]
-      <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.view r))
-      <| Dict.toList model.records
+      [ class "record-container"
+      , onMouseDown UnfocusAll
+      ]
+      [ case model.view of
+        Floating -> 
+          div []
+            <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.viewFloating r))
+            <| Dict.toList model.records
+        Table ->
+          let
+            keys = model.records
+              |> Dict.values
+              |> List.foldl
+                (\rec acc ->
+                  Set.union acc (Set.fromList <| Array.toList rec.k)
+                ) Set.empty
+              |> Set.toList
+          in
+            table [ class "table" ]
+              [ thead []
+                [ tr [] <| List.map (th [] << List.singleton << text) keys
+                ]
+              , tbody []
+                <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy2 viewRow keys r))
+                <| Dict.toList model.records
+              ]
+      ]
     ]
 
 
