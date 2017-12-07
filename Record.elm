@@ -199,6 +199,6 @@ viewRow keys rec =
         Just idx -> Array.get idx from |> Maybe.withDefault ""
   in
     tr []
-      <| List.map (th [] << List.singleton << text)
+      <| List.map (td [] << List.singleton << text)
       <| List.map (\k -> if rec.focused then fetch k rec.v else fetch k rec.c)
       <| keys

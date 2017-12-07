@@ -10,7 +10,6 @@ $info: #f567ed;
 
 html, body {
   background-color: #e3f0d5;
-  padding: 20px;
   min-height: 100vh;
   overflow: auto;
 }
@@ -23,12 +22,25 @@ html, body {
   }
 }
 
+header {
+  padding: 40px;
+}
+
 .record-container {
-  position: relative;
   margin: auto;
-  width: 1800px;
-  height: 90vh;
+  width: 100vw;
+  min-height: 900px;
+  padding: 0 26px 0 14px;
   background-color: #f0e5d5;
+
+  table.table {
+    width: calc(100vw - 40px);
+  }
+
+  .floating {
+    position: relative;
+    margin: 0 40px;
+  }
 }
 
 .record {

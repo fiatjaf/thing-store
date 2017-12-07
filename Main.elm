@@ -1,5 +1,5 @@
 import Html exposing
-  ( Html, text, div
+  ( Html, text, div, header
   , table, tr, th, tbody, thead
   , button
   )
@@ -189,7 +189,7 @@ view model =
         viewContextMenuItems
         model.context_menu
       ]
-    , div [ class "columns is-mobile" ]
+    , header [ class "columns is-mobile" ]
       [ div [ class "column" ] [ text "data at \"~\"" ]
       , div [ class "column" ]
         [ button [ class "button", onClick NewRecord ] [ text "New" ]
@@ -212,7 +212,7 @@ view model =
       ]
       [ case model.view of
         Floating -> 
-          div []
+          div [ class "floating" ]
             <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.viewFloating r))
             <| Dict.toList model.records
         Table ->
