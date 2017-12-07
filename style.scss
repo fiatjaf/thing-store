@@ -25,20 +25,27 @@ html, body {
 
 .record-container {
   position: relative;
-  width: 800px;
+  margin: auto;
+  width: 1800px;
   height: 90vh;
   background-color: #f0e5d5;
 }
 
 .record {
   overflow: hidden;
-  border: 2px solid cyan;
+
+  .id {
+    float: right;
+    margin-right: 2px;
+  }
 
   &.focused {
     table { background-color: white; }
   }
 
   table {
+    border: 2px solid cyan;
+
     background-color: papayawhip;
 
     width: 100%;

@@ -3,7 +3,7 @@ module Record exposing (..)
 import Html exposing
   ( Html, text , div
   , table, tr, td, th
-  , input
+  , input, span
   )
 import Html.Attributes exposing
   ( class, style, value, readonly
@@ -143,14 +143,6 @@ view rec =
           (\x y -> { x = x - rec.pos.x, y = y - rec.pos.y } )
           ( Decode.field "pageX" Decode.int )
           ( Decode.field "pageY" Decode.int )
-    , if rec.focused
-      then onWithOptions -- when this is already focused, clicking it shouldn't trigger
-        "mousedown"      -- the global "UnfocusAll" event, but default shouldn't be
-        { stopPropagation = True, preventDefault = False } -- prevented, because it is
-        ( Decode.succeed Noop ) -- needed to change the focus between <input>s
-      else on -- when this is not focused, we want it to be focused no matter what.
-        "mouseup"
-        ( Decode.succeed Focus )
     , style
       [ "position" => "absolute"
       , "left" => px rec.pos.x
@@ -159,12 +151,24 @@ view rec =
     , title rec.id
     , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
     ]
-    [ table [] <|
-      List.map4 (viewKV rec)
-        ( List.range 0 ((Array.length rec.k) - 1) )
-        ( Array.toList rec.k)
-        ( Array.toList rec.v)
-        ( Array.toList rec.c)
+    [ div [ class "id" ]
+      [ span [ class "tag" ] [ text rec.id ]
+      ]
+    , table
+      [ if rec.focused
+        then onWithOptions -- when this is already focused, clicking it shouldn't trigger
+          "mousedown"      -- the global "UnfocusAll" event, but default shouldn't be
+          { stopPropagation = True, preventDefault = False } -- prevented, because it is
+          ( Decode.succeed Noop ) -- needed to change the focus between <input>s
+        else on -- when this is not focused, we want it to be focused no matter what.
+          "mouseup"
+          ( Decode.succeed Focus )
+      ] <|
+        List.map4 (viewKV rec)
+          ( List.range 0 ((Array.length rec.k) - 1) )
+          ( Array.toList rec.k)
+          ( Array.toList rec.v)
+          ( Array.toList rec.c)
     ]
 
 viewKV : Record -> Int -> String -> String -> String -> Html Msg
