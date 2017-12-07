@@ -47,6 +47,20 @@ add id records =
   in
     insert id rec records
 
+fromTemplate : String -> Record -> Record
+fromTemplate next_id rec =
+  let
+    keys = rec.k
+    nkeys = Array.length keys
+  in
+    Record
+      next_id
+      keys
+      ( Array.repeat nkeys "" )
+      ( Array.repeat nkeys "" )
+      { x = 0, y = 0 }
+      False
+
 newpair : Record -> Record
 newpair rec =
   { rec
@@ -143,6 +157,7 @@ view rec =
       , "top" => px rec.pos.y
       ]
     , title rec.id
+    , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
     ]
     [ table [] <|
       List.map4 (viewKV rec)

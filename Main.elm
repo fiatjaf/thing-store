@@ -36,7 +36,7 @@ type alias Flags =
 
 type alias Model =
   { records : Records
-  , next_blank_id : String
+  , next_id : String
   , dragging : Maybe ( String, Position )
   , pending_saves : Int
   , context_menu : ContextMenu Context
@@ -73,6 +73,7 @@ type Msg
   | PendingSaves Int
   | UnfocusAll
   | NewRecord
+  | CopyRecord String
   | RecordAction String Record.Msg
   | ContextMenuAction (ContextMenu.Msg Context)
   | Noop
@@ -80,16 +81,23 @@ type Msg
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
-    NextBlankId id -> ( { model | next_blank_id = id }, Cmd.none )
+    NextBlankId id -> ( { model | next_id = id }, Cmd.none )
     PendingSaves n -> ( { model | pending_saves = n }, Cmd.none )
     UnfocusAll -> 
       ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
       , Cmd.none
       )
     NewRecord ->
-      ( { model | records = model.records |> add model.next_blank_id }
+      ( { model | records = model.records |> add model.next_id }
       , requestId ()
       )
+    CopyRecord id ->
+      case model.records |> get id |> Maybe.map (fromTemplate model.next_id) of
+        Nothing -> ( model, Cmd.none )
+        Just copy ->
+          ( { model | records = model.records |> insert model.next_id copy }
+          , requestId ()
+          )
     RecordAction id rmsg ->
       case get id model.records of
         Nothing -> ( model, Cmd.none )
@@ -195,7 +203,11 @@ viewContextMenuItems : Context -> List (List ( ContextMenu.Item, Msg ))
 viewContextMenuItems context =
   case context of
     BackgroundContext -> []
-    RecordContext id -> []
+    RecordContext id ->
+      [ [ ( ContextMenu.item "Copy record template", CopyRecord id )
+        ]
+      ]
     KeyValueContext id idx ->
-      [ [ ( ContextMenu.item "Delete row", RecordAction id (DeleteRow idx) ) ]
+      [ [ ( ContextMenu.item "Delete row", RecordAction id (DeleteRow idx) )
+        ]
       ]
