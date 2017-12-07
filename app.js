@@ -13,13 +13,14 @@ var app
 
 db.allDocs({include_docs: true})
   .then(res => res.rows
+    .map(r => console.log(r) || r)
     .map(r => r.doc)
     .map(doc => ({
       id: doc._id,
       pos: doc.pos,
       k: doc.kv.map(kv => kv[0]),
       v: doc.kv.map(kv => kv[1]),
-      calc: doc.kv.map(() => ''),
+      c: doc.kv.map(() => ''),
       focused: false
     }))
   )

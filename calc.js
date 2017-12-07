@@ -1,4 +1,4 @@
-const jq = require('jq-web/jq.wasm')
+const jq = require('jq-web/jq.wasm.js')
 const Graph = require('graph.js/dist/graph.full.js')
 const concat = require('concat-iterator')
 
@@ -7,7 +7,7 @@ function toSimplified (elmRecord) {
   for (let i = 0; i < elmRecord.k.length; i++) {
     let k = elmRecord.k[i]
     if (k.length) {
-      let calcValue = elmRecord.calc[i]
+      let calcValue = elmRecord.c[i]
       try {
         o[k] = JSON.parse(calcValue)
       } catch (e) {

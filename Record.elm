@@ -12,9 +12,11 @@ import Html.Attributes exposing
 import Html.Events exposing (on, onWithOptions, onInput)
 import Dict exposing (Dict, insert, get)
 import Json.Decode as Decode
-import Array exposing (Array)
+import Array exposing (Array, slice)
 import Mouse exposing (Position)
+import ContextMenu
 
+import Menu exposing (..)
 import Helpers exposing (..)
 
 
@@ -25,7 +27,7 @@ type alias Record =
   { id : String
   , k : Array String
   , v : Array String
-  , calc : Array String
+  , c : Array String
   , pos : Position
   , focused : Bool
   }
@@ -50,14 +52,14 @@ newpair rec =
   { rec
     | k = Array.push "" rec.k
     , v = Array.push "" rec.v
-    , calc = Array.push "" rec.calc
+    , c = Array.push "" rec.c
   }
 
 
 -- UPDATE
 
 
-type RecordMsg
+type Msg
   = DragStart Position
   | DragAt Position
   | DragEnd Position
@@ -65,10 +67,12 @@ type RecordMsg
   | ChangeValue Int String String
   | Focus
   | CalcResult Int String
+  | DeleteRow Int
+  | RecordContextMenuAction (ContextMenu.Msg Context)
   | Noop
 
 
-update : RecordMsg -> Record -> (Record, Cmd RecordMsg)
+update : Msg -> Record -> (Record, Cmd Msg)
 update msg record =
   case msg of
     DragStart _ -> ( record, Cmd.none )
@@ -84,22 +88,34 @@ update msg record =
         nr =
           { record
             | v = record.v |> Array.set idx newv
-            , calc = record.calc |> Array.set idx newv
+            , c = record.c |> Array.set idx newv
           }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
-      ( { record | calc = record.calc |> Array.set idx v }
+      ( { record | c = record.c |> Array.set idx v }
       , Cmd.none
       )
+    DeleteRow idx ->
+      let
+        len = Array.length record.k
+      in
+        ( { record
+            | k = Array.append (slice 0 idx record.k) (slice (idx + 1) len record.k)
+            , v = Array.append (slice 0 idx record.v) (slice (idx + 1) len record.v)
+            , c = Array.append (slice 0 idx record.c) (slice (idx + 1) len record.c)
+          }
+        , Cmd.none
+        )
+    RecordContextMenuAction msg -> ( record, Cmd.none )
     Noop -> ( record, Cmd.none )
 
 
 -- VIEW
 
 
-view : Record -> Html RecordMsg
+view : Record -> Html Msg
 view rec =
   div
     [ class <| "record " ++ if rec.focused then "focused" else ""
@@ -129,28 +145,30 @@ view rec =
     , title rec.id
     ]
     [ table [] <|
-      List.map4 (viewKV rec.focused)
+      List.map4 (viewKV rec)
         ( List.range 0 ((Array.length rec.k) - 1) )
         ( Array.toList rec.k)
         ( Array.toList rec.v)
-        ( Array.toList rec.calc)
+        ( Array.toList rec.c)
     ]
 
-viewKV : Bool -> Int -> String -> String -> String -> Html RecordMsg
-viewKV focused idx k v calc =
-  tr [] <|
+viewKV : Record -> Int -> String -> String -> String -> Html Msg
+viewKV rec idx k v c =
+  tr
+    [ ContextMenu.open RecordContextMenuAction (KeyValueContext rec.id idx)
+    ]
     [ th []
       [ input
         [ value k
         , onInput <| ChangeKey idx
-        , readonly <| not focused
+        , readonly <| not rec.focused
         ] []
       ]
     , td []
       [ input
-        [ value <| if focused then v else calc
+        [ value <| if rec.focused then v else c
         , onInput <| ChangeValue idx k
-        , readonly <| not focused
+        , readonly <| not rec.focused
         ] []
       ]
     ]
