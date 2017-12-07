@@ -4,7 +4,7 @@ import Html exposing
   )
 import Html.Lazy exposing (..)
 import Html.Attributes exposing (class)
-import Html.Events exposing (onMouseDown)
+import Html.Events exposing (onMouseDown, onClick)
 import Dict exposing (Dict, insert, get)
 import Array exposing (Array)
 import Platform.Sub as Sub
@@ -36,7 +36,6 @@ type alias Flags =
 
 type alias Model =
   { records : Records
-  , blank_id : String
   , next_blank_id : String
   , dragging : Maybe ( String, Position )
   , pending_saves : Int
@@ -55,7 +54,6 @@ init flags =
         )
         |> add flags.blank
       ) 
-      flags.blank
       ""
       Nothing
       0
@@ -74,6 +72,7 @@ type Msg
   = NextBlankId String
   | PendingSaves Int
   | UnfocusAll
+  | NewRecord
   | RecordAction String Record.Msg
   | ContextMenuAction (ContextMenu.Msg Context)
   | Noop
@@ -86,6 +85,10 @@ update msg model =
     UnfocusAll -> 
       ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
       , Cmd.none
+      )
+    NewRecord ->
+      ( { model | records = model.records |> add model.next_blank_id }
+      , requestId ()
       )
     RecordAction id rmsg ->
       case get id model.records of
@@ -101,41 +104,16 @@ update msg model =
                 )
               Focus -> if r.focused then ( model, Cmd.none ) else update UnfocusAll model
               ChangeKey _ _ ->
-                if id == model.blank_id
-                then
-                  ( { model
-                      | records = model.records |> add model.next_blank_id
-                      , blank_id = model.next_blank_id
-                    }
-                  , Cmd.batch
-                    [ queueRecord r
-                    , requestId ()
-                    ]
-                  )
-                else
-                  ( model
-                  , queueRecord r
-                  )
+                ( model
+                , queueRecord r
+                )
               ChangeValue idx v ->
-                if id == model.blank_id
-                then
-                  ( { model
-                      | records = model.records |> add model.next_blank_id
-                      , blank_id = model.next_blank_id
-                    }
-                  , Cmd.batch
-                    [ changedValue (id, idx, v)
-                    , queueRecord r
-                    , requestId ()
-                    ]
-                  )
-                else
-                  ( model
-                  , Cmd.batch
-                    [ changedValue (id, idx, v)
-                    , queueRecord r
-                    ]
-                  )
+                ( model
+                , Cmd.batch
+                  [ changedValue (id, idx, v)
+                  , queueRecord r
+                  ]
+                )
               DeleteRow idx ->
                 ( model
                 , Cmd.batch
@@ -195,6 +173,9 @@ view model =
       ]
     , div [ class "columns is-mobile" ]
       [ div [ class "column" ] [ text "data at \"~\"" ]
+      , div [ class "column" ]
+        [ button [ class "button", onClick NewRecord ] [ text "New" ]
+        ]
       , div [ class "column" ]
         [ button [ class "button" ]
           [ text <| "save " ++ (toString model.pending_saves) ++ " modified records"
