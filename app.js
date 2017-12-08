@@ -2,27 +2,31 @@
 
 const PouchDB = require('pouchdb-core')
   .plugin(require('pouchdb-adapter-idb'))
-const debounce = require('debounce')
 
 const db = new PouchDB('~')
 
 const { calc, depGraph } = require('./calc')
-const { id } = require('./helpers')
+const { id, debounceWithArgs } = require('./helpers')
 
 var app
+var revcache = {}
 
 db.allDocs({include_docs: true})
   .then(res => res.rows
     .map(r => console.log(r) || r)
     .map(r => r.doc)
-    .map(doc => ({
-      id: doc._id,
-      pos: doc.pos,
-      k: doc.kv.map(kv => kv[0]),
-      v: doc.kv.map(kv => kv[1]),
-      c: doc.kv.map(() => ''),
-      focused: false
-    }))
+    .map(doc => {
+      revcache[doc._id] = doc._rev
+
+      return {
+        id: doc._id,
+        pos: doc.pos,
+        k: doc.kv.map(kv => kv[0]),
+        v: doc.kv.map(kv => kv[1]),
+        c: doc.kv.map(kv => kv[1]),
+        focused: false
+      }
+    })
   )
   .then(records => {
     app = Elm.Main.fullscreen({
@@ -79,12 +83,15 @@ function setupPorts (app) {
       .catch(e => console.log('error', e))
   }
 
-  app.ports.changedValue.subscribe(debounce(changedValue, 1000))
+  app.ports.changedValue.subscribe(
+    debounceWithArgs(changedValue, 1000, args => args[0][0] + '¬' + args[0][1])
+  )
 
   var queue = {}
   app.ports.queueRecord.subscribe(record => {
     queue[record.id] = {
       _id: record.id,
+      _rev: revcache[record.id],
       kv: record.k.map((k, i) => [k, record.v[i]]),
       pos: record.pos
     }
@@ -103,8 +110,14 @@ function setupPorts (app) {
 
     return db.bulkDocs(docslist)
       .then(r => {
-        console.log('saved queue')
-        app.ports.gotSaveResult.send(`Saved ${docslist.length} records that were pending.`)
+        console.log('saved queue', r)
+        for (let i = 0; i < r.length; i++) {
+          if (r[i].ok) {
+            revcache[r[i].id] = r[i].rev
+          }
+        }
+
+        // app.ports.gotSaveResult.send(`Saved ${docslist.length} records that were pending.`)
         app.ports.gotPendingSaves.send(Object.keys(queue).length)
       })
       .catch(e => {

@@ -18,6 +18,8 @@ function toSimplified (elmRecord) {
   return o
 }
 
+let jqLoaded = new Promise(resolve => setTimeout(resolve, 3000))
+
 module.exports.calc = function (currId, formula) {
   // build the object that will be passed to the formula
   var base = {}
@@ -43,13 +45,14 @@ def filter(expr): $all | map(select(expr));
   `
 
   // execute and return
-  try {
-    let res = jq.raw(JSON.stringify(base), prelude + formula, ['-c'])
-    return Promise.resolve(res)
-  } catch (e) {
-    console.log(JSON.stringify(base), prelude + formula)
-    return Promise.reject(e)
-  }
+  return jqLoaded
+    .then(() =>
+      jq.raw(JSON.stringify(base), prelude + formula, ['-c'])
+    )
+    .catch(e => {
+      console.log(JSON.stringify(base), prelude + formula)
+      throw e
+    })
 }
 
 class DepGraph extends Graph {

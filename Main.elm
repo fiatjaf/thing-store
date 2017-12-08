@@ -54,13 +54,11 @@ init : Flags -> (Model, Cmd Msg)
 init flags =
   let
     (context_menu, msg) = ContextMenu.init
+    records = Dict.fromList <| List.map (\r -> ( r.id, r )) flags.records
+    nrecords = Dict.size records
   in
     ( Model
-      ( ( Dict.fromList
-          <| List.map (\r -> ( r.id, r )) flags.records
-        )
-        |> add flags.blank
-      ) 
+      ( records |> if nrecords == 0 then add flags.blank else identity )
       ""
       Floating
       Nothing
@@ -69,6 +67,15 @@ init flags =
     , Cmd.batch
       [ requestId ()
       , Cmd.map ContextMenuAction msg
+      , Cmd.batch <| 
+        ( List.concat
+          <| List.map
+            (\r -> Array.toList
+              <| Array.indexedMap (\idx v -> changedValue (r.id, idx, v))
+              <| r.v
+            )
+          <| flags.records
+        )
       ]
     )
 
@@ -79,6 +86,7 @@ init flags =
 type Msg
   = NextBlankId String
   | PendingSaves Int
+  | SavePending
   | UnfocusAll
   | ChangeView View
   | NewRecord
@@ -92,6 +100,7 @@ update msg model =
   case msg of
     NextBlankId id -> ( { model | next_id = id }, Cmd.none )
     PendingSaves n -> ( { model | pending_saves = n }, Cmd.none )
+    SavePending -> ( model, saveToPouch () )
     UnfocusAll -> 
       ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
       , Cmd.none
@@ -201,8 +210,10 @@ view model =
           ] [ text "Toggle view" ]
         ]
       , div [ class "column" ]
-        [ button [ class "button" ]
-          [ text <| "save " ++ (toString model.pending_saves) ++ " modified records"
+        [ button
+          [ class "button"
+          , onClick SavePending
+          ] [ text <| "Save " ++ (toString model.pending_saves) ++ " modified records"
           ]
         ]
       ]
