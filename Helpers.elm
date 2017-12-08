@@ -1,5 +1,8 @@
 module Helpers exposing (..)
 
+import Task
+import Process
+import Time exposing (Time)
 import Mouse exposing (Position)
 
 
@@ -19,3 +22,9 @@ findIndexStartingSomewhere start_at elem list =
       if first == elem
       then Just start_at
       else findIndexStartingSomewhere (start_at + 1) elem rest
+
+delay : Float -> msg -> Cmd msg
+delay time msg =
+  Process.sleep (Time.second * time)
+    |> Task.andThen (always <| Task.succeed msg)
+    |> Task.perform identity

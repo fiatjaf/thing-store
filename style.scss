@@ -14,6 +14,15 @@ html, body {
   overflow: auto;
 }
 
+.notification {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  width: 400px;
+  max-width: 60%;
+  z-index: 50;
+}
+
 .context-menu {
   font-family: monospace;
 

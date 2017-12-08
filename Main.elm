@@ -40,6 +40,7 @@ type alias Model =
   { records : Dict String Record
   , next_id : String
   , view : View
+  , notification : Maybe String
   , dragging : Maybe ( String, Position )
   , pending_saves : Int
   , context_menu : ContextMenu Context
@@ -61,6 +62,7 @@ init flags =
       ( records |> if nrecords == 0 then add flags.blank else identity )
       ""
       Floating
+      Nothing
       Nothing
       0
       context_menu
@@ -84,7 +86,9 @@ init flags =
 
 
 type Msg
-  = NextBlankId String
+  = EraseNotification
+  | Notify String
+  | NextBlankId String
   | PendingSaves Int
   | SavePending
   | UnfocusAll
@@ -98,6 +102,14 @@ type Msg
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
+    EraseNotification ->
+      ( { model | notification = Nothing }
+      , Cmd.none
+      )
+    Notify text ->
+      ( { model | notification = Just text }
+      , delay 5 EraseNotification
+      )
     NextBlankId id -> ( { model | next_id = id }, Cmd.none )
     PendingSaves n -> ( { model | pending_saves = n }, Cmd.none )
     SavePending -> ( model, saveToPouch () )
@@ -182,6 +194,7 @@ subscriptions model =
     , gotPendingSaves PendingSaves
     , gotCalcResult (\(id,idx,v) -> RecordAction id (CalcResult idx v))
     , Sub.map ContextMenuAction (ContextMenu.subscriptions model.context_menu)
+    , notify Notify
     ]
 
 
@@ -191,7 +204,10 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ div [ class "context-menu" ]
+    [ model.notification
+      |> Maybe.map (div [ class "notification" ] << List.singleton << text)
+      |> Maybe.withDefault (text "")
+    , div [ class "context-menu" ]
       [ ContextMenu.view
         Menu.config
         ContextMenuAction
