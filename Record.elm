@@ -25,9 +25,10 @@ import Helpers exposing (..)
 
 type alias Record =
   { id : String
-  , k : Array String
-  , v : Array String
-  , c : Array String
+  , k : Array String -- keys
+  , v : Array String -- values
+  , c : Array String -- calculated values (or error message)
+  , e : Array Bool   -- if key calculation is errored
   , pos : Position
   , focused : Bool
   }
@@ -40,6 +41,7 @@ add id records =
       ( Array.fromList [ "" ] )
       ( Array.fromList [ "" ] )
       ( Array.fromList [ "" ] )
+      ( Array.fromList [ False ] )
       { x = 0, y = 0 }
       False
   in
@@ -56,6 +58,7 @@ fromTemplate next_id rec =
       keys
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys "" )
+      ( Array.repeat nkeys False )
       { x = 0, y = 0 }
       False
 
@@ -65,6 +68,7 @@ newpair rec =
     | k = Array.push "" rec.k
     , v = Array.push "" rec.v
     , c = Array.push "" rec.c
+    , e = Array.push False rec.e
   }
 
 
@@ -79,6 +83,7 @@ type Msg
   | ChangeValue Int String
   | Focus
   | CalcResult Int String
+  | CalcError Int String
   | DeleteRow Int
   | RecordContextMenuAction (ContextMenu.Msg Context)
   | Noop
@@ -92,6 +97,8 @@ update msg record =
     DragEnd _ -> ( record, Cmd.none )
     ChangeKey idx newk ->
       let
+        _ = Debug.log "idx" idx
+        _ = Debug.log "k" record.k
         nr = { record | k = record.k |> Array.set idx newk }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
@@ -101,12 +108,23 @@ update msg record =
           { record
             | v = record.v |> Array.set idx newv
             , c = record.c |> Array.set idx newv
+            , e = record.e |> Array.set idx False
           }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
-      ( { record | c = record.c |> Array.set idx v }
+      ( { record
+          | c = record.c |> Array.set idx v
+          , e = record.e |> Array.set idx False
+        }
+      , Cmd.none
+      )
+    CalcError idx message ->
+      ( { record
+          | c = record.c |> Array.set idx message
+          , e = record.e |> Array.set idx True
+        }
       , Cmd.none
       )
     DeleteRow idx ->
@@ -117,6 +135,7 @@ update msg record =
             | k = Array.append (slice 0 idx record.k) (slice (idx + 1) len record.k)
             , v = Array.append (slice 0 idx record.v) (slice (idx + 1) len record.v)
             , c = Array.append (slice 0 idx record.c) (slice (idx + 1) len record.c)
+            , e = Array.append (slice 0 idx record.e) (slice (idx + 1) len record.e)
           }
         , Cmd.none
         )
@@ -162,15 +181,16 @@ viewFloating rec =
           "mouseup"
           ( Decode.succeed Focus )
       ] <|
-        List.map4 (viewKV rec)
+        List.map5 (viewKV rec)
           ( List.range 0 ((Array.length rec.k) - 1) )
           ( Array.toList rec.k)
           ( Array.toList rec.v)
           ( Array.toList rec.c)
+          ( Array.toList rec.e)
     ]
 
-viewKV : Record -> Int -> String -> String -> String -> Html Msg
-viewKV rec idx k v c =
+viewKV : Record -> Int -> String -> String -> String -> Bool -> Html Msg
+viewKV rec idx k v c e =
   tr
     [ ContextMenu.open RecordContextMenuAction (KeyValueContext rec.id idx)
     ]
@@ -181,7 +201,7 @@ viewKV rec idx k v c =
         , readonly <| not rec.focused
         ] []
       ]
-    , td []
+    , td [ class <| if e && not rec.focused then "error" else "", title c ]
       [ input
         [ value <| if rec.focused then v else c
         , onInput <| ChangeValue idx
@@ -193,12 +213,20 @@ viewKV rec idx k v c =
 viewRow : List String -> Record -> Html Msg
 viewRow keys rec =
   let
-    fetch key from =
+    fetch key =
       case findIndex key (Array.toList rec.k) of
-        Nothing -> ""
-        Just idx -> Array.get idx from |> Maybe.withDefault ""
+        Nothing -> ( "", "", False )
+        Just idx ->
+          ( ( Array.get idx rec.v |> Maybe.withDefault "" )
+          , ( Array.get idx rec.c |> Maybe.withDefault "" )
+          , ( Array.get idx rec.e |> Maybe.withDefault False )
+          )
   in
     tr []
-      <| List.map (td [] << List.singleton << text)
-      <| List.map (\k -> if rec.focused then fetch k rec.v else fetch k rec.c)
-      <| keys
+      <| List.map
+        (\(v,c,e) ->
+          td [ class <| if e && not rec.focused then "error" else "", title c ]
+            [ text <| if rec.focused then v else c
+            ]
+        )
+      <| List.map fetch keys

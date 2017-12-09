@@ -1,32 +1,18 @@
 const jq = require('jq-web/jq.wasm.js')
-const Graph = require('graph.js/dist/graph.full.js')
-const concat = require('concat-iterator')
 
-function toSimplified (elmRecord) {
-  var o = {}
-  for (let i = 0; i < elmRecord.k.length; i++) {
-    let k = elmRecord.k[i]
-    if (k.length) {
-      let calcValue = elmRecord.c[i]
-      try {
-        o[k] = JSON.parse(calcValue)
-      } catch (e) {
-        o[k] = calcValue
-      }
-    }
-  }
-  return o
-}
+const { toSimplified, setAt } = require('./helpers')
 
-let jqLoaded = new Promise(resolve => setTimeout(resolve, 3000))
+let jqLoaded = new Promise(resolve => setTimeout(resolve, 5000))
 
-module.exports.calc = function (currId, formula) {
+var recordStore = module.exports.recordStore = {}
+
+module.exports.calc = function calc (currId, formula) {
   // build the object that will be passed to the formula
   var base = {}
   var all = []
 
-  for (let [_id, record] of depGraph.vertices()) {
-    if (_id === ALL) continue
+  for (let _id in recordStore) {
+    let record = recordStore[_id]
 
     let srecord = toSimplified(record)
     base[_id] = srecord
@@ -39,9 +25,6 @@ module.exports.calc = function (currId, formula) {
 
   // custom variables and functions
   let prelude = `
-${JSON.stringify(all)} as $all |
-def find(expr): $all | map(select(expr)) | .[0];
-def filter(expr): $all | map(select(expr));
   `
 
   // execute and return
@@ -51,52 +34,71 @@ def filter(expr): $all | map(select(expr));
     )
     .catch(e => {
       console.log(JSON.stringify(base), prelude + formula)
+      if (e.message && e.message.slice(0, 10) === 'jq: error ') {
+        e.message = e.message.slice(10)
+        e.message = e.message.slice(0, 16) === '(at <stdin>:0): '
+          ? e.message.slice(16)
+          : e.message
+      }
       throw e
     })
 }
 
-class DepGraph extends Graph {
+class DepGraph {
   constructor () {
-    super()
+    this.recordReferencesFrom = {}
+    this.recordReferencesTo = {}
 
-    this.addVertex(ALL, {})
+    this.rowReferencesFrom = {}
+    this.rowReferencesTo = {}
   }
 
-  refs (_id) {
-    try {
-      return this.verticesFrom(_id)
-    } catch (e) {
-      return []
+  * referencesTo (source_id, source_idx) {
+    for (let ref in this.recordReferencesTo[source_id]) {
+      let [ref_id, ref_idx] = ref.split('¬')
+      yield [ref_id, parseInt(ref_idx)]
+    }
+
+    for (let ref in this.rowReferencesTo[`${source_id}¬${source_idx}`]) {
+      let [ref_id, ref_idx] = ref.split('¬')
+      yield [ref_id, parseInt(ref_idx)]
     }
   }
 
-  dependents (_id) {
-    try {
-      return concat(
-        this.verticesTo(_id),
-        this.verticesTo(ALL)
-      )
-    } catch (e) {
-      return []
+  clearReferencesFrom (source_id, source_idx) {
+    for (let ref_id in this.recordReferencesFrom[`${source_id}¬${source_idx}`]) {
+      delete this.recordReferencesFrom[`${source_id}¬${source_idx}`]
+      delete this.recordReferencesTo[ref_id][`${source_id}¬${source_idx}`]
+    }
+
+    for (let ref in this.rowReferencesFrom[`${source_id}¬${source_idx}`]) {
+      delete this.rowReferencesFrom[source_id]
+      delete this.rowReferencesTo[ref][`${source_id}¬${source_idx}`]
     }
   }
 
-  cleanRefs (_id) {
-    for (let [refId] of this.refs(_id)) {
-      this.removeEdge(_id, refId)
-    }
-  }
+  setReferencesFrom (_id, idx, formula) {
+    let source = `${_id}¬${idx}`
 
-  insertRefs (_id, formula) {
-    if (/(^| )\$all\b/.exec(formula)) {
-      this.addEdge(_id, ALL)
-    }
+    formula.replace(
+      /(^| |\W)\.(r\w{5}\b)(\.(\w+)|\["(\w+)"\])?/g,
+      (fullmatch, _, target_id, key2, key1) => {
+        if (target_id === _id) {
+          throw new Error('circular reference')
+        }
 
-    formula.replace(/(^| )\.(r\w{5})\b/g, (m, _, ref) => {
-      this.addEdge(_id, ref)
-    })
+        let target_idx = recordStore[target_id].k.indexOf(key1 || key2)
+        if (target_idx !== -1) {
+          setAt(this.rowReferencesTo, [`${target_id}¬${target_idx}`, source], true)
+          setAt(this.rowReferencesFrom, [source, `${target_id}¬${target_idx}`], true)
+        } else {
+          // key not found, depend on the entire record
+          setAt(this.recordReferencesTo, [target_id, source], true)
+          setAt(this.recordReferencesFrom, [source, target_id], true)
+        }
+      }
+    )
   }
 }
 
-const ALL = module.exports.ALL = '$$_all$$'
-var depGraph = module.exports.depGraph = new DepGraph()
+module.exports.depGraph = new DepGraph()

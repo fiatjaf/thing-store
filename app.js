@@ -1,22 +1,24 @@
 /* global Elm */
 
 const PouchDB = require('pouchdb-core')
-  .plugin(require('pouchdb-adapter-idb'))
+const IDB = require('pouchdb-adapter-idb')
 
+const { calc, depGraph, recordStore } = require('./calc')
+const { id, debounceWithArgs, toPouch } = require('./helpers')
+
+PouchDB.plugin(IDB)
 const db = new PouchDB('~')
 
-const { calc, depGraph } = require('./calc')
-const { id, debounceWithArgs } = require('./helpers')
-
 var app
-var revcache = {}
+
+var revCache = {}
 
 db.allDocs({include_docs: true})
   .then(res => res.rows
     .map(r => console.log(r) || r)
     .map(r => r.doc)
     .map(doc => {
-      revcache[doc._id] = doc._rev
+      revCache[doc._id] = doc._rev
 
       return {
         id: doc._id,
@@ -24,6 +26,7 @@ db.allDocs({include_docs: true})
         k: doc.kv.map(kv => kv[0]),
         v: doc.kv.map(kv => kv[1]),
         c: doc.kv.map(kv => kv[1]),
+        e: doc.kv.map(() => false),
         focused: false
       }
     })
@@ -36,7 +39,7 @@ db.allDocs({include_docs: true})
 
     // prepare records to use in formulas
     records.forEach(record => {
-      depGraph.addVertex(record.id, record)
+      recordStore[record.id] = record
     })
 
     setupPorts(app)
@@ -49,80 +52,97 @@ function setupPorts (app) {
   })
 
   function changedValue ([_id, idx, value]) {
-    console.log('changed value', _id, idx, value)
-    depGraph.cleanRefs(_id)
-    depGraph.vertexValue(_id).v[idx] = value
+    depGraph.clearReferencesFrom(_id, idx)
+    recordStore[_id].v[idx] = value
 
     var waitCalc
     if (value[0] === '=') {
       let formula = value.slice(1)
 
-      depGraph.insertRefs(_id, formula)
+      try {
+        depGraph.setReferencesFrom(_id, idx, formula)
 
-      waitCalc = calc(_id, formula)
-        .then((res) => {
-          console.log(_id, idx, res)
-          app.ports.gotCalcResult.send([_id, idx, res])
-
-          depGraph.vertexValue(_id).c[idx] = JSON.parse(res)
-        })
-        .catch(e => console.log(`error on calc(${value})`, e))
+        waitCalc = calc(_id, formula)
+          .then((res) => {
+            console.log(_id, idx, res)
+            app.ports.gotCalcResult.send([_id, idx, res])
+            recordStore[_id].c[idx] = JSON.parse(res)
+          })
+          .catch(e => {
+            console.log(`error on calc(${value})`, e)
+            app.ports.gotCalcError.send([_id, idx, e.message])
+            recordStore[_id].c[idx] = null
+          })
+      } catch (e) {
+        if (e.message === 'circular reference') {
+          console.log(`circular reference on ${_id}:${idx}: ${value}`)
+          app.ports.gotCalcError.send([_id, idx, e.message])
+          recordStore[_id].c[idx] = null
+        }
+        waitCalc = Promise.reject(e)
+      }
     } else {
-      depGraph.vertexValue(_id).c[idx] = value
+      recordStore[_id].c[idx] = value
       waitCalc = Promise.resolve()
     }
 
     waitCalc
       .then(() => {
-        for (let [did, record] of depGraph.dependents(_id)) {
-          for (let i = 0; i < record.k.length; i++) {
-            changedValue([did, i, record.v[i]])
-          }
+        for (let [did, didx] of depGraph.referencesTo(_id, idx)) {
+          let v = recordStore[did].v[didx]
+          changedValue([did, didx, v])
         }
       })
       .catch(e => console.log('error', e))
   }
 
   app.ports.changedValue.subscribe(
-    debounceWithArgs(changedValue, 1000, args => args[0][0] + '¬' + args[0][1])
+    debounceWithArgs(changedValue, 2000, args => args[0][0] + '¬' + args[0][1])
   )
 
   var queue = {}
   app.ports.queueRecord.subscribe(record => {
-    queue[record.id] = {
-      _id: record.id,
-      _rev: revcache[record.id],
-      kv: record.k.map((k, i) => [k, record.v[i]]),
-      pos: record.pos
-    }
+    // this must be updated
+    queue[record.id] = true
 
     app.ports.gotPendingSaves.send(Object.keys(queue).length)
 
-    // prepare record to use in formulas
-    depGraph.addVertex(record.id, record)
+    // update the record in the canonical store
+    recordStore[record.id] = record
   })
 
   app.ports.saveToPouch.subscribe(() => {
-    var docslist = Object.keys(queue)
-      .map(_id => queue[_id])
+    let willSave = Object.keys(queue).length
 
-    queue = {}
+    var docslist = Object.keys(queue)
+      .map(_id => {
+        let doc = toPouch(recordStore[_id])
+        doc._rev = revCache[_id]
+        return doc
+      })
 
     return db.bulkDocs(docslist)
-      .then(r => {
-        console.log('saved queue', r)
-        for (let i = 0; i < r.length; i++) {
-          if (r[i].ok) {
-            revcache[r[i].id] = r[i].rev
+      .then(res => {
+        console.log('saved queue', res)
+        for (let i = 0; i < res.length; i++) {
+          let r = res[i]
+          if (r.ok) {
+            revCache[r.id] = r.rev
+            delete queue[r.id]
           }
         }
 
-        // app.ports.gotSaveResult.send(`Saved ${docslist.length} records that were pending.`)
+        let nsaved = Object.keys(queue).length - willSave
+
+        app.ports.notify.send(
+          `Saved ${nsaved} records.` +
+          nsaved < willSave ? ` ${willSave - nsaved} remaining.` : ''
+        )
         app.ports.gotPendingSaves.send(Object.keys(queue).length)
       })
       .catch(e => {
         console.log('error saving queue', e)
-        app.ports.gotSaveResult.send(`Error saving ${docslist.length} records.`)
+        app.ports.notify.send(`Error saving ${docslist.length} records.`)
       })
   })
 }

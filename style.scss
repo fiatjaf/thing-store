@@ -60,6 +60,11 @@ header {
     margin-right: 2px;
   }
 
+  td.error {
+    border: 4px dotted red;
+    background: pink;
+  }
+
   &.focused {
     table { background-color: white; }
   }

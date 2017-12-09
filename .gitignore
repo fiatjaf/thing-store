@@ -7,3 +7,5 @@ bundle.js
 bundle.css
 elm-stuff
 elm.js
+*.map
+*.tmp

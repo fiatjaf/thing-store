@@ -193,6 +193,7 @@ subscriptions model =
           ]
     , gotPendingSaves PendingSaves
     , gotCalcResult (\(id,idx,v) -> RecordAction id (CalcResult idx v))
+    , gotCalcError (\(id,idx,v) -> RecordAction id (CalcError idx v))
     , Sub.map ContextMenuAction (ContextMenu.subscriptions model.context_menu)
     , notify Notify
     ]
