@@ -10,6 +10,7 @@ import Html.Attributes exposing
   , title, attribute
   )
 import Html.Events exposing (on, onWithOptions, onInput)
+import Html.Lazy exposing (..)
 import Dict exposing (Dict, insert, get)
 import Json.Decode as Decode
 import Array exposing (Array, slice)
@@ -171,16 +172,7 @@ viewFloating rec =
     [ div [ class "id" ]
       [ span [ class "tag" ] [ text rec.id ]
       ]
-    , table
-      [ if rec.focused
-        then onWithOptions -- when this is already focused, clicking it shouldn't trigger
-          "mousedown"      -- the global "UnfocusAll" event, but default shouldn't be
-          { stopPropagation = True, preventDefault = False } -- prevented, because it is
-          ( Decode.succeed Noop ) -- needed to change the focus between <input>s
-        else on -- when this is not focused, we want it to be focused no matter what.
-          "mouseup"
-          ( Decode.succeed Focus )
-      ] <|
+    , table [ preventOrFocus rec ] <|
         List.map5 (viewKV rec)
           ( List.range 0 ((Array.length rec.k) - 1) )
           ( Array.toList rec.k)
@@ -191,9 +183,7 @@ viewFloating rec =
 
 viewKV : Record -> Int -> String -> String -> String -> Bool -> Html Msg
 viewKV rec idx k v c e =
-  tr
-    [ ContextMenu.open RecordContextMenuAction (KeyValueContext rec.id idx)
-    ]
+  tr [ ContextMenu.open RecordContextMenuAction (KeyValueContext rec.id idx) ]
     [ th []
       [ input
         [ value k
@@ -215,18 +205,46 @@ viewRow keys rec =
   let
     fetch key =
       case findIndex key (Array.toList rec.k) of
-        Nothing -> ( "", "", False )
+        Nothing -> ( -1, "", "", False )
         Just idx ->
-          ( ( Array.get idx rec.v |> Maybe.withDefault "" )
+          ( idx
+          , ( Array.get idx rec.v |> Maybe.withDefault "" )
           , ( Array.get idx rec.c |> Maybe.withDefault "" )
           , ( Array.get idx rec.e |> Maybe.withDefault False )
           )
   in
-    tr []
-      <| List.map
-        (\(v,c,e) ->
-          td [ class <| if e && not rec.focused then "error" else "", title c ]
-            [ text <| if rec.focused then v else c
-            ]
-        )
+    tr
+      [ class <| "record " ++ if rec.focused then "focused" else ""
+      , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
+      ]
+      <| (::) (th [] [ text rec.id ])
+      <| List.map (lazy2 viewRowCell rec)
       <| List.map fetch keys
+
+viewRowCell : Record -> (Int, String, String, Bool) -> Html Msg
+viewRowCell rec (idx, v, c, e) =
+  td
+    [ class <| if e && not rec.focused then "error" else ""
+    , title c
+    , preventOrFocus rec
+    ]
+    [ input
+      [ value <| if rec.focused then v else c
+      , onInput <| ChangeValue idx
+      , readonly <| not rec.focused
+      ] []
+    ]
+
+
+-- HELPERS
+
+
+preventOrFocus : Record -> Html.Attribute Msg
+preventOrFocus rec = if rec.focused
+  then onWithOptions -- when this is already focused, clicking it shouldn't trigger
+    "mousedown"      -- the global "UnfocusAll" event, but default shouldn't be
+    { stopPropagation = True, preventDefault = False } -- prevented, because it is
+    ( Decode.succeed Noop ) -- needed to change the focus between <input>s
+  else on -- when this is not focused, we want it to be focused no matter what.
+    "mouseup"
+    ( Decode.succeed Focus )

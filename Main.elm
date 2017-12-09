@@ -117,7 +117,7 @@ update msg model =
       ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
       , Cmd.none
       )
-    ChangeView v -> ( { model | view = v }, Cmd.none )
+    ChangeView v -> ( { model | view = v, dragging = Nothing }, Cmd.none )
     NewRecord ->
       ( { model | records = model.records |> add model.next_id }
       , requestId ()
@@ -240,7 +240,7 @@ view model =
       ]
       [ case model.view of
         Floating -> 
-          div [ class "floating" ]
+          div [ class "floating-view" ]
             <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.viewFloating r))
             <| Dict.toList model.records
         Table ->
@@ -249,16 +249,19 @@ view model =
               |> Dict.values
               |> List.foldl
                 (\rec acc ->
-                  Set.union acc (Set.fromList <| Array.toList rec.k)
+                  Set.union acc (Set.remove "" <| Set.fromList <| Array.toList rec.k)
                 ) Set.empty
               |> Set.toList
           in
-            table [ class "table" ]
+            table [ class "table table-view" ]
               [ thead []
-                [ tr [] <| List.map (th [] << List.singleton << text) keys
+                [ tr []
+                  <| (::) (th [] [ text "id" ])
+                  <| List.map (th [] << List.singleton << text) keys
                 ]
               , tbody []
-                <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy2 viewRow keys r))
+                <| List.map
+                  (\(id, r) -> Html.map (RecordAction id) (lazy2 viewRow keys r))
                 <| Dict.toList model.records
               ]
       ]

@@ -42,31 +42,15 @@ header {
   padding: 0 26px 0 14px;
   background-color: #f0e5d5;
 
-  table.table {
+  table.table-view {
     width: calc(100vw - 40px);
+
+    thead th { text-align: center; }
   }
 
-  .floating {
+  .floating-view {
     position: relative;
     margin: 0 40px;
-  }
-}
-
-.record {
-  overflow: hidden;
-
-  .id {
-    float: right;
-    margin-right: 2px;
-  }
-
-  td.error {
-    border: 4px dotted red;
-    background: pink;
-  }
-
-  &.focused {
-    table { background-color: white; }
   }
 
   table {
@@ -78,6 +62,44 @@ header {
     margin: 0;
     border-collapse: collapse;
     border-spacing: 0;
+  }
+}
+
+.record {
+  td.error {
+    border: 4px dotted red;
+    background: pink;
+  }
+
+  td {
+    input {
+      padding-left: 5px;
+
+      &:focus {
+        background-color: #def6ff;
+      }
+    }
+  }
+
+  input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    font-family: monospace;
+    background-color: inherit;
+  }
+}
+
+.floating-view .record {
+  overflow: hidden;
+
+  .id {
+    float: right;
+    margin-right: 2px;
+  }
+
+  &.focused {
+    table { background-color: white; }
   }
 
   td, th {
@@ -107,22 +129,23 @@ header {
       }
     }
   }
+}
 
-  td {
-    input {
-      padding-left: 5px;
-
-      &:focus {
-        background-color: #def6ff;
-      }
-    }
+.table-view .record {
+  th {
+    text-align: center;
   }
 
-  input {
-    width: 100%;
-    height: 100%;
-    border: none;
-    font-family: monospace;
-    background-color: inherit;
+  th, td {
+    vertical-align: middle;
+  }
+  td {
+    padding: 0;
+  }
+  th, td input {
+    padding: 0.4em 0.4em 0.4em 0.75em;
+  }
+  td input {
+    height: 33px;
   }
 }
