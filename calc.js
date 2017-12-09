@@ -6,21 +6,17 @@ let jqLoaded = new Promise(resolve => setTimeout(resolve, 5000))
 
 var recordStore = module.exports.recordStore = {}
 
-module.exports.calc = function calc (currId, formula) {
+module.exports.calc = function calc (currentId, formula) {
   // build the object that will be passed to the formula
   var base = {}
-  var all = []
 
   for (let _id in recordStore) {
-    let record = recordStore[_id]
+    base[_id] = toSimplified(recordStore[_id])
+  }
 
-    let srecord = toSimplified(record)
-    base[_id] = srecord
-    all.push(srecord)
-
-    for (let k in srecord) {
-      base[k] = srecord[k]
-    }
+  let currentRecord = toSimplified(recordStore[currentId])
+  for (let k in currentRecord) {
+    base[k] = currentRecord[k]
   }
 
   // custom variables and functions
@@ -54,11 +50,16 @@ class DepGraph {
   }
 
   * referencesTo (source_id, source_idx) {
+    // references to this entire record made from other kv-rows
     for (let ref in this.recordReferencesTo[source_id]) {
       let [ref_id, ref_idx] = ref.split('¬')
-      yield [ref_id, parseInt(ref_idx)]
+
+      if (!(ref_id === source_id && ref_idx === source_idx.toString())) {
+        yield [ref_id, parseInt(ref_idx)]
+      }
     }
 
+    // references specific to this kv-row from other kv-rows
     for (let ref in this.rowReferencesTo[`${source_id}¬${source_idx}`]) {
       let [ref_id, ref_idx] = ref.split('¬')
       yield [ref_id, parseInt(ref_idx)]
@@ -83,10 +84,6 @@ class DepGraph {
     formula.replace(
       /(^| |\W)\.(r\w{5}\b)(\.(\w+)|\["(\w+)"\])?/g,
       (fullmatch, _, target_id, key2, key1) => {
-        if (target_id === _id) {
-          throw new Error('circular reference')
-        }
-
         let target_idx = recordStore[target_id].k.indexOf(key1 || key2)
         if (target_idx !== -1) {
           setAt(this.rowReferencesTo, [`${target_id}¬${target_idx}`, source], true)
@@ -98,6 +95,10 @@ class DepGraph {
         }
       }
     )
+
+    // always reference itself -- so when a kv pair change, recalc all others
+    setAt(this.recordReferencesTo, [_id, source])
+    setAt(this.recordReferencesFrom, [source, _id])
   }
 }
 
