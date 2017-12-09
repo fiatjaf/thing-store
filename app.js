@@ -51,46 +51,50 @@ function setupPorts (app) {
     app.ports.gotId.send(id('r'))
   })
 
-  function changedValue ([_id, idx, value]) {
-    depGraph.clearReferencesFrom(_id, idx)
+  function changedValue ([_id, idx, value, prev_calls = {}]) {
     recordStore[_id].v[idx] = value
+    depGraph.clearReferencesFrom(_id, idx)
 
-    var waitCalc
-    if (value[0] === '=') {
-      let formula = value.slice(1)
+    Promise.resolve()
+      .then(() => {
+        if (value[0] === '=') {
+          let formula = value.slice(1)
 
-      try {
-        depGraph.setReferencesFrom(_id, idx, formula)
+          depGraph.setReferencesFrom(_id, idx, formula)
+          if (`${_id}¬${idx}` in prev_calls) {
+            throw new Error('circular reference')
+          } else {
+            prev_calls[`${_id}¬${idx}`] = true
+          }
 
-        waitCalc = calc(_id, formula)
-          .then((res) => {
-            console.log(_id, idx, res)
-            app.ports.gotCalcResult.send([_id, idx, res])
-            recordStore[_id].c[idx] = JSON.parse(res)
-          })
-          .catch(e => {
-            console.log(`error on calc(${value})`, e)
-            app.ports.gotCalcError.send([_id, idx, e.message])
-            recordStore[_id].c[idx] = null
-          })
-      } catch (e) {
-        if (e.message === 'circular reference') {
-          console.log(`circular reference on ${_id}:${idx}: ${value}`)
-          app.ports.gotCalcError.send([_id, idx, e.message])
-          recordStore[_id].c[idx] = null
+          return calc(_id, formula)
+        } else {
+          recordStore[_id].c[idx] = value
         }
-        waitCalc = Promise.reject(e)
-      }
-    } else {
-      recordStore[_id].c[idx] = value
-      waitCalc = Promise.resolve()
-    }
-
-    waitCalc
+      })
+      .then(res => {
+        if (res !== undefined) {
+          app.ports.gotCalcResult.send([_id, idx, res])
+          recordStore[_id].c[idx] = JSON.parse(res)
+        }
+      })
       .then(() => {
         for (let [did, didx] of depGraph.referencesTo(_id, idx)) {
           let v = recordStore[did].v[didx]
-          changedValue([did, didx, v])
+          changedValue([did, didx, v, prev_calls])
+        }
+      })
+      .catch(e => {
+        if (e.message === 'circular reference') {
+          console.log(`circular reference on ${_id}:${idx}: ${value}`)
+        } else {
+          console.log(`error on calc(${value})`, e)
+        }
+
+        for (let errored in prev_calls) {
+          let [err_id, err_idx] = errored.split('¬')
+          app.ports.gotCalcError.send([err_id, parseInt(err_idx), e.message])
+          recordStore[err_id].c[err_idx] = null
         }
       })
       .catch(e => console.log('error', e))
@@ -132,11 +136,10 @@ function setupPorts (app) {
           }
         }
 
-        let nsaved = Object.keys(queue).length - willSave
-
+        let nsaved = willSave - Object.keys(queue).length
         app.ports.notify.send(
           `Saved ${nsaved} records.` +
-          nsaved < willSave ? ` ${willSave - nsaved} remaining.` : ''
+          (nsaved < willSave ? ` ${willSave - nsaved} remaining.` : '')
         )
         app.ports.gotPendingSaves.send(Object.keys(queue).length)
       })
