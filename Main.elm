@@ -253,7 +253,7 @@ view model =
                 ) Set.empty
               |> Set.toList
           in
-            table [ class "table table-view" ]
+            table [ class "table is-bordered table-view" ]
               [ thead []
                 [ tr []
                   <| (::) (th [] [ text "id" ])

@@ -45,7 +45,13 @@ header {
   table.table-view {
     width: calc(100vw - 40px);
 
-    thead th { text-align: center; }
+    thead {
+      tr { background-color: teal; }
+      th {
+        color: white;
+        text-align: center;
+      }
+    }
   }
 
   .floating-view {
@@ -54,9 +60,7 @@ header {
   }
 
   table {
-    border: 2px solid cyan;
-
-    background-color: papayawhip;
+    background-color: hsl(177, 66%, 90%);
 
     width: 100%;
     margin: 0;
@@ -98,6 +102,11 @@ header {
     margin-right: 2px;
   }
 
+  table {
+    border: 2px solid cyan;
+  }
+
+
   &.focused {
     table { background-color: white; }
   }
@@ -132,6 +141,14 @@ header {
 }
 
 .table-view .record {
+  &.focused {
+    background-color: white;
+  }
+
+  &.unset {
+    background: hsl(177, 67%, 92%);
+  }
+
   th {
     text-align: center;
   }

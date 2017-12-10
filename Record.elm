@@ -82,6 +82,7 @@ type Msg
   | DragEnd Position
   | ChangeKey Int String
   | ChangeValue Int String
+  | AddNewKVWithValue String String
   | Focus
   | CalcResult Int String
   | CalcError Int String
@@ -113,6 +114,15 @@ update msg record =
           }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
+    AddNewKVWithValue key newv ->
+      ( { record
+          | k = record.k |> Array.push key
+          , v = record.v |> Array.push newv
+          , c = record.c |> Array.push newv
+          , e = record.e |> Array.push False
+        }
+      , Cmd.none
+      )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
       ( { record
@@ -204,36 +214,47 @@ viewRow : List String -> Record -> Html Msg
 viewRow keys rec =
   let
     fetch key =
-      case findIndex key (Array.toList rec.k) of
-        Nothing -> ( -1, "", "", False )
-        Just idx ->
+      findIndex key (Array.toList rec.k)
+      |> Maybe.map
+        (\idx ->
           ( idx
           , ( Array.get idx rec.v |> Maybe.withDefault "" )
           , ( Array.get idx rec.c |> Maybe.withDefault "" )
           , ( Array.get idx rec.e |> Maybe.withDefault False )
           )
+        )
   in
     tr
       [ class <| "record " ++ if rec.focused then "focused" else ""
       , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
+      , preventOrFocus rec
       ]
       <| (::) (th [] [ text rec.id ])
-      <| List.map (lazy2 viewRowCell rec)
-      <| List.map fetch keys
+      <| List.map2 (lazy3 viewCell rec)
+        ( keys )
+        ( List.map fetch keys )
 
-viewRowCell : Record -> (Int, String, String, Bool) -> Html Msg
-viewRowCell rec (idx, v, c, e) =
-  td
-    [ class <| if e && not rec.focused then "error" else ""
-    , title c
-    , preventOrFocus rec
-    ]
-    [ input
-      [ value <| if rec.focused then v else c
-      , onInput <| ChangeValue idx
-      , readonly <| not rec.focused
-      ] []
-    ]
+viewCell : Record -> String -> Maybe (Int, String, String, Bool) -> Html Msg
+viewCell rec key celldata =
+  case celldata of
+    Just (idx, v, c, e) ->
+      td
+        [ class <| if e && not rec.focused then "error" else ""
+        , title c
+        ]
+        [ input
+          [ value <| if rec.focused then v else c
+          , onInput <| ChangeValue idx
+          , readonly <| not rec.focused
+          ] []
+        ]
+    Nothing ->
+      td [ class "unset" ]
+        [ input
+          [ onInput <| AddNewKVWithValue key
+          , readonly <| not rec.focused
+          ] []
+        ]
 
 
 -- HELPERS
