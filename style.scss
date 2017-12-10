@@ -31,8 +31,17 @@ html, body {
   }
 }
 
+aside.menu {
+  padding: 1.5rem;
+  background-color: #f0e5d5;
+}
+
+.menu-body {
+
+}
+
 header {
-  padding: 40px;
+  padding: 20px 40px 0;
 }
 
 .record-container {
@@ -71,7 +80,6 @@ header {
 
 .record {
   td.error {
-    border: 4px dotted red;
     background: pink;
   }
 

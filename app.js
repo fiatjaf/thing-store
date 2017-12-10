@@ -3,8 +3,8 @@
 const PouchDB = require('pouchdb-core')
 const IDB = require('pouchdb-adapter-idb')
 
-const { calc, depGraph, recordStore } = require('./calc')
-const { id, debounceWithArgs, toPouch } = require('./helpers')
+const { calc, depGraph, recordStore, view } = require('./calc')
+const { id, debounceWithArgs, toPouch, toConfig } = require('./helpers')
 
 PouchDB.plugin(IDB)
 const db = new PouchDB('~')
@@ -17,10 +17,23 @@ db.allDocs({include_docs: true})
   .then(res => res.rows
     .map(r => console.log(r) || r)
     .map(r => r.doc)
-    .map(doc => {
+  )
+  .then(docs => {
+    docs.forEach(doc => {
       revCache[doc._id] = doc._rev
+    })
 
-      return {
+    // the first record may be the 'config' doc
+    var config = {
+      kinds: []
+    }
+    if (docs[0]._id === 'config') {
+      config = toConfig(docs.shift())
+    }
+
+    return [
+      config,
+      docs.map(doc => ({
         id: doc._id,
         pos: doc.pos,
         k: doc.kv.map(kv => kv[0]),
@@ -28,12 +41,13 @@ db.allDocs({include_docs: true})
         c: doc.kv.map(kv => kv[1]),
         e: doc.kv.map(() => false),
         focused: false
-      }
-    })
-  )
-  .then(records => {
+      }))
+    ]
+  })
+  .then(([config, records]) => {
     app = Elm.Main.fullscreen({
       records: records,
+      config: config,
       blank: id('r')
     })
 
@@ -102,6 +116,18 @@ function setupPorts (app) {
 
   app.ports.changedValue.subscribe(
     debounceWithArgs(changedValue, 2000, args => args[0][0] + '¬' + args[0][1])
+  )
+
+  function runView (code) {
+    view(code)
+      .then(recordlist => {
+        app.ports.replaceRecords.send(recordlist)
+      })
+      .catch(e => console.log('failed running view', e))
+  }
+
+  app.ports.runView.subscribe(
+    debounceWithArgs(runView, 2000, args => args[0][0])
   )
 
   var queue = {}

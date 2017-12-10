@@ -1,11 +1,11 @@
 import Html exposing
-  ( Html, text, div, header
+  ( Html, text, div, header, nav
   , table, tr, th, tbody, thead
-  , button
+  , button, input, a
   )
 import Html.Lazy exposing (..)
-import Html.Attributes exposing (class)
-import Html.Events exposing (onMouseDown, onClick)
+import Html.Attributes exposing (class, value)
+import Html.Events exposing (onMouseDown, onClick, onInput)
 import Dict exposing (Dict, insert, get)
 import Array exposing (Array)
 import Set exposing (Set)
@@ -16,6 +16,7 @@ import ContextMenu exposing (ContextMenu)
 import Record exposing (..)
 import Helpers exposing (..)
 import Menu exposing (..)
+import Settings exposing (..)
 import Ports exposing (..)
 
 
@@ -29,6 +30,7 @@ main =
 
 type alias Flags =
   { records : List Record
+  , config : Settings
   , blank : String
   }
 
@@ -39,16 +41,27 @@ type alias Flags =
 type alias Model =
   { records : Dict String Record
   , next_id : String
+  , format : Format
   , view : View
+  , settings : Settings
   , notification : Maybe String
   , dragging : Maybe ( String, Position )
   , pending_saves : Int
   , context_menu : ContextMenu Context
+  , page : Page
   }
 
-type View
+type Page
+  = HomePage
+  | SettingsPage
+
+type Format
   = Floating
   | Table
+
+type View
+  = SavedView String String
+  | TypingView String
 
 
 init : Flags -> (Model, Cmd Msg)
@@ -62,10 +75,13 @@ init flags =
       ( records |> if nrecords == 0 then add flags.blank else identity )
       ""
       Floating
+      ( TypingView "" )
+      flags.config
       Nothing
       Nothing
       0
       context_menu
+      HomePage
     , Cmd.batch
       [ requestId ()
       , Cmd.map ContextMenuAction msg
@@ -88,14 +104,19 @@ init flags =
 type Msg
   = EraseNotification
   | Notify String
+  | Navigate Page
   | NextBlankId String
   | PendingSaves Int
   | SavePending
+  | ReplaceRecords (List Record)
+  | TypeView String
+  | SaveView
   | UnfocusAll
-  | ChangeView View
+  | ChangeFormat Format
   | NewRecord
   | CopyRecord String
   | RecordAction String Record.Msg
+  | SettingsAction Settings.Msg
   | ContextMenuAction (ContextMenu.Msg Context)
   | Noop
 
@@ -110,14 +131,24 @@ update msg model =
       ( { model | notification = Just text }
       , delay 5 EraseNotification
       )
+    Navigate page -> ( { model | page = page }, Cmd.none )
     NextBlankId id -> ( { model | next_id = id }, Cmd.none )
     PendingSaves n -> ( { model | pending_saves = n }, Cmd.none )
     SavePending -> ( model, saveToPouch () )
+    ReplaceRecords recordlist ->
+      ( { model | records = Dict.fromList <| List.map (\r -> (r.id, r)) recordlist }
+      , Cmd.none
+      )
+    TypeView t ->
+      ( { model | view = TypingView t }
+      , runView t
+      )
+    SaveView -> ( model, Cmd.none )
     UnfocusAll -> 
       ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
       , Cmd.none
       )
-    ChangeView v -> ( { model | view = v, dragging = Nothing }, Cmd.none )
+    ChangeFormat v -> ( { model | format = v, dragging = Nothing }, Cmd.none )
     NewRecord ->
       ( { model | records = model.records |> add model.next_id }
       , requestId ()
@@ -166,6 +197,7 @@ update msg model =
             ( { m | records = m.records |> insert id r }
             , Cmd.batch [ mcmd, Cmd.map (RecordAction id) rcmd ]
             )
+    SettingsAction msg -> ( model, Cmd.none )
     ContextMenuAction msg ->
       let
         (context_menu, cmd) = ContextMenu.update msg model.context_menu
@@ -194,6 +226,7 @@ subscriptions model =
     , gotPendingSaves PendingSaves
     , gotCalcResult (\(id,idx,v) -> RecordAction id (CalcResult idx v))
     , gotCalcError (\(id,idx,v) -> RecordAction id (CalcError idx v))
+    , replaceRecords ReplaceRecords
     , Sub.map ContextMenuAction (ContextMenu.subscriptions model.context_menu)
     , notify Notify
     ]
@@ -205,7 +238,26 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ model.notification
+    [ nav [ class "navbar" ]
+      [ div [ class "navbar-brand" ]
+        [ div [ class "navbar-item" ] [ text "data at \"~\"" ]
+        , div [ class "navbar-burger" ] []
+        ]
+      , div [ class "navbar-menu" ]
+        [ div [ class "navbar-start" ] []
+        , div [ class "navbar-end" ]
+          [ a
+            [ class "navbar-item"
+            , onClick <| Navigate SettingsPage
+            ] [ text "menu" ]
+          , a
+            [ class "navbar-item"
+            , onClick <| Navigate HomePage
+            ] [ text "records" ]
+          ]
+        ]
+      ]
+    , model.notification
       |> Maybe.map (div [ class "notification" ] << List.singleton << text)
       |> Maybe.withDefault (text "")
     , div [ class "context-menu" ]
@@ -215,18 +267,47 @@ view model =
         viewContextMenuItems
         model.context_menu
       ]
-    , header [ class "columns is-mobile" ]
-      [ div [ class "column" ] [ text "data at \"~\"" ]
-      , div [ class "column" ]
+    , case model.page of
+      HomePage -> viewHome model
+      SettingsPage -> Html.map SettingsAction (Settings.view model.settings)
+    ]
+
+viewHome : Model -> Html Msg
+viewHome model =
+  div []
+    [ header [ class "columns is-mobile" ]
+      [ div [ class "column" ]
+        [ div [ class "field is-grouped" ]
+          [ div [ class "control is-expanded" ]
+            [ input
+              [ class "input"
+              , onInput TypeView
+              , value <| case model.view of
+                TypingView t -> t
+                SavedView _ t -> t
+              ] []
+            ]
+          , button [ class "button", onClick SaveView ] [ text "Save view" ]
+          ]
+        ]
+      , div [ class "column is-narrow" ]
         [ button [ class "button", onClick NewRecord ] [ text "New" ]
         ]
-      , div [ class "column" ]
-        [ button
-          [ class "button"
-          , onClick <| ChangeView (if model.view == Table then Floating else Table)
-          ] [ text "Toggle view" ]
-        ]
-      , div [ class "column" ]
+      , div [ class "column is-narrow" ] <|
+        case model.format of
+          Table -> 
+            [ button
+              [ class "button"
+              , onClick <| ChangeFormat Floating
+              ] [ text "View records" ]
+            ]
+          Floating ->
+            [ button
+              [ class "button"
+              , onClick <| ChangeFormat Table
+              ] [ text "View table" ]
+            ]
+      , div [ class "column is-narrow" ]
         [ button
           [ class "button"
           , onClick SavePending
@@ -238,7 +319,7 @@ view model =
       [ class "record-container"
       , onMouseDown UnfocusAll
       ]
-      [ case model.view of
+      [ case model.format of
         Floating -> 
           div [ class "floating-view" ]
             <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.viewFloating r))
@@ -266,7 +347,6 @@ view model =
               ]
       ]
     ]
-
 
 viewContextMenuItems : Context -> List (List ( ContextMenu.Item, Msg ))
 viewContextMenuItems context =

@@ -103,3 +103,7 @@ class DepGraph {
 }
 
 module.exports.depGraph = new DepGraph()
+
+module.exports.view = function view (code) {
+  return {}
+}
