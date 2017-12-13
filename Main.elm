@@ -30,7 +30,7 @@ main =
 
 type alias Flags =
   { records : List Record
-  , config : Settings
+  , config : Config
   , blank : String
   }
 
@@ -41,28 +41,23 @@ type alias Flags =
 type alias Model =
   { records : Dict String Record
   , next_id : String
-  , format : Format
+  , pending_saves : Int
+  , page : Page
   , view : View
   , settings : Settings
   , notification : Maybe String
   , dragging : Maybe ( String, Position )
-  , pending_saves : Int
   , context_menu : ContextMenu Context
-  , page : Page
   }
 
 type Page
   = HomePage
   | SettingsPage
 
-type Format
-  = Floating
-  | Table
-
 type View
-  = SavedView String String
-  | TypingView String
-
+  = FloatingView
+  | TableView
+  | JSONView String
 
 init : Flags -> (Model, Cmd Msg)
 init flags =
@@ -71,17 +66,16 @@ init flags =
     records = Dict.fromList <| List.map (\r -> ( r.id, r )) flags.records
     nrecords = Dict.size records
   in
-    ( Model
-      ( records |> if nrecords == 0 then add flags.blank else identity )
-      ""
-      Floating
-      ( TypingView "" )
-      flags.config
-      Nothing
-      Nothing
-      0
-      context_menu
-      HomePage
+    ( { records = ( records |> if nrecords == 0 then add flags.blank else identity )
+      , pending_saves = 0
+      , view = FloatingView
+      , page = HomePage
+      , settings = { defaultSettings | config = flags.config }
+      , next_id = ""
+      , notification = Nothing
+      , dragging = Nothing
+      , context_menu = context_menu
+      }
     , Cmd.batch
       [ requestId ()
       , Cmd.map ContextMenuAction msg
@@ -112,7 +106,7 @@ type Msg
   | TypeView String
   | SaveView
   | UnfocusAll
-  | ChangeFormat Format
+  | ChangeView View
   | NewRecord
   | CopyRecord String
   | RecordAction String Record.Msg
@@ -140,7 +134,7 @@ update msg model =
       , Cmd.none
       )
     TypeView t ->
-      ( { model | view = TypingView t }
+      ( { model | view = JSONView t }
       , runView t
       )
     SaveView -> ( model, Cmd.none )
@@ -148,7 +142,7 @@ update msg model =
       ( { model | records = model.records |> Dict.map (\_ r -> { r | focused = False }) }
       , Cmd.none
       )
-    ChangeFormat v -> ( { model | format = v, dragging = Nothing }, Cmd.none )
+    ChangeView v -> ( { model | view = v, dragging = Nothing }, Cmd.none )
     NewRecord ->
       ( { model | records = model.records |> add model.next_id }
       , requestId ()
@@ -197,7 +191,9 @@ update msg model =
             ( { m | records = m.records |> insert id r }
             , Cmd.batch [ mcmd, Cmd.map (RecordAction id) rcmd ]
             )
-    SettingsAction msg -> ( model, Cmd.none )
+    SettingsAction msg ->
+      let ( settings, cmd ) = Settings.update msg model.settings
+      in ( { model | settings = settings }, Cmd.map SettingsAction cmd )
     ContextMenuAction msg ->
       let
         (context_menu, cmd) = ContextMenu.update msg model.context_menu
@@ -282,9 +278,6 @@ viewHome model =
             [ input
               [ class "input"
               , onInput TypeView
-              , value <| case model.view of
-                TypingView t -> t
-                SavedView _ t -> t
               ] []
             ]
           , button [ class "button", onClick SaveView ] [ text "Save view" ]
@@ -294,19 +287,20 @@ viewHome model =
         [ button [ class "button", onClick NewRecord ] [ text "New" ]
         ]
       , div [ class "column is-narrow" ] <|
-        case model.format of
-          Table -> 
+        case model.view of
+          TableView -> 
             [ button
               [ class "button"
-              , onClick <| ChangeFormat Floating
+              , onClick <| ChangeView FloatingView
               ] [ text "View records" ]
             ]
-          Floating ->
+          FloatingView ->
             [ button
               [ class "button"
-              , onClick <| ChangeFormat Table
+              , onClick <| ChangeView TableView
               ] [ text "View table" ]
             ]
+          JSONView jq -> []
       , div [ class "column is-narrow" ]
         [ button
           [ class "button"
@@ -319,12 +313,12 @@ viewHome model =
       [ class "record-container"
       , onMouseDown UnfocusAll
       ]
-      [ case model.format of
-        Floating -> 
+      [ case model.view of
+        FloatingView -> 
           div [ class "floating-view" ]
             <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.viewFloating r))
             <| Dict.toList model.records
-        Table ->
+        TableView ->
           let
             keys = model.records
               |> Dict.values
@@ -345,6 +339,7 @@ viewHome model =
                   (\(id, r) -> Html.map (RecordAction id) (lazy2 viewRow keys r))
                 <| Dict.toList model.records
               ]
+        JSONView jq -> div [] []
       ]
     ]
 

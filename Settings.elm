@@ -2,10 +2,12 @@ module Settings exposing (..)
 
 import Html exposing
   ( Html, text, div, aside
-  , p, ul, li, a
+  , p, ul, li, a, h2
+  , label, input, button
   )
-import Html.Attributes exposing (class, value)
+import Html.Attributes exposing (class, value, style, type_)
 import Html.Events exposing (onClick, onInput)
+import Array exposing (Array)
 
 import Record exposing (Record)
 
@@ -14,15 +16,26 @@ import Record exposing (Record)
 
 
 type alias Settings =
-  { kinds : List Kind
+  { config : Config
+  , section : Maybe Section
+  }
+
+defaultSettings = Settings (Config Array.empty) Nothing
+
+type alias Config =
+  { kinds : Array Kind
   }
 
 type alias Kind =
-  { id : Int
-  , name : String
-  , default_fields : List String
+  { name : String
+  , color : String
+  , default_fields : Array String
   }
 
+emptykind = Kind "" "#cb5454" Array.empty
+
+type Section
+  = KindSection Int
 
 -- toNormalRecord : Settings -> Record
 -- toNormalRecord settings =
@@ -39,13 +52,59 @@ type alias Kind =
 type Msg
   = NewKind
   | SelectKind Int
+  | KindAction Int KindMsg
+
+type KindMsg
+  = KindName String
+  | KindField Int
+  | KindColor String
+  | SaveKind
 
 
 update : Msg -> Settings -> (Settings, Cmd Msg)
 update msg settings =
   case msg of
-    NewKind -> ( settings, Cmd.none )
-    SelectKind id -> ( settings, Cmd.none )
+    NewKind ->
+      let 
+        config = settings.config
+        emptykinds = settings.config.kinds
+          |> Array.toList
+          |> List.indexedMap (,)
+          |> List.filter (Tuple.second >> (==) emptykind)
+        (kinds,index) = case emptykinds of
+          [] ->
+            ( settings.config.kinds |> Array.push emptykind
+            , Array.length settings.config.kinds
+            )
+          (i,_)::_ -> ( settings.config.kinds, i )
+      in
+        ( { settings
+            | section = Just (KindSection index)
+            , config = { config | kinds = kinds }
+          }
+        , Cmd.none
+        )
+    SelectKind i -> ( { settings | section = Just <| KindSection i }, Cmd.none )
+    KindAction i msg ->
+      let
+        kind : Maybe Kind
+        kind = settings.config.kinds
+          |> Array.get i
+          |> Maybe.map
+            (\kind -> case msg of
+              KindName name -> { kind | name = name }
+              KindColor color -> { kind | color = color }
+              KindField _ -> kind
+              SaveKind -> kind
+            )
+        kinds : Array Kind
+        kinds = case kind of
+          Nothing -> settings.config.kinds
+          Just kind -> Array.set i kind settings.config.kinds
+
+        config = settings.config
+      in
+        ( { settings | config = { config | kinds = kinds } }, Cmd.none )
 
 
 -- VIEW
@@ -60,22 +119,70 @@ view settings =
         , ul [ class "menu-list" ]
           [ li []
             [ a [] [ text "Edit kinds" ]
-            , ul []
-              <| List.map (\k -> li [] [ a [ onClick <| SelectKind k.id ] [ text k.name ] ])
-              <| settings.kinds
+            , ul [ class "kinds" ]
+              <| List.indexedMap
+                (\i kind ->
+                  li []
+                    [ a
+                      [ onClick <| SelectKind i
+                      , style [ ( "background-color", kind.color ) ]
+                      , class <|
+                        if settings.section == Just (KindSection i)
+                        then "is-active"
+                        else ""
+                      ] [ text kind.name ]
+                    ]
+                )
+              <| Array.toList
+              <| settings.config.kinds
             ]
-          , li [] [ a [ onClick NewKind ] [ text "Add new kind" ] ]
+           , li [] [ a [ onClick NewKind ] [ text "Add new kind" ] ]
           ]
-        , p [ class "menu-label" ] [ text "Menu Label" ]
+        , p [ class "menu-label" ] [ text "Views" ]
         , ul [ class "menu-list" ]
-          [ li [] [ a [] [ text "Dashboard" ] ]
-          , li [] [ a [] [ text "Customers" ] ]
+          [ li [] [ a [] [ text "Edit views" ] ]
+          , li [] [ a [] [ text "New view" ] ]
           ]
         ]
       ]
     , div [ class "column" ]
       [ div [ class "menu-body" ]
-        [
+        [ case settings.section of
+          Nothing -> div [] []
+          Just (KindSection i) -> settings.config.kinds
+            |> Array.get i
+            |> Maybe.map (viewKindEdit i)
+            |> Maybe.withDefault (div [] [])
+            |> Html.map (KindAction i)
+        ]
+      ]
+    ]
+
+viewKindEdit : Int -> Kind -> Html KindMsg
+viewKindEdit i kind =
+  div []
+    [ div [ class "field is-horizontal" ]
+      [ div [ class "field-label" ] []
+      , div [ class "field-body" ]
+        [ h2 [ class "title" ] [ text <| "kind " ++ kind.name ++ " (" ++ toString i ++ ")" ]
+        ]
+      ]
+    , div [ class "field is-horizontal" ]
+      [ div [ class "field-label" ] [ label [] [ text "Name: " ] ]
+      , div [ class "field-body" ]
+        [ input [ class "input", value kind.name, onInput KindName ] []
+        ]
+      ]
+    , div [ class "field is-horizontal" ]
+      [ div [ class "field-label" ] [ label [] [ text "Color: " ] ]
+      , div [ class "field-body" ]
+        [ input [ class "input", type_ "color", value kind.color, onInput KindColor ] []
+        ]
+      ]
+    , div [ class "field is-horizontal" ]
+      [ div [ class "field-label" ] []
+      , div [ class "field-body" ]
+        [ button [ class "button is-primary", onClick SaveKind ] [ text "Save" ]
         ]
       ]
     ]

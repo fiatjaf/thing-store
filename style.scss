@@ -34,10 +34,20 @@ html, body {
 aside.menu {
   padding: 1.5rem;
   background-color: #f0e5d5;
+
+  .kinds a {
+    opacity: 0.8;
+
+    &.is-active {
+      color: white;
+      text-shadow: 1px 1px 1px black;
+    }
+  }
 }
 
 .menu-body {
-
+  max-width: 700px;
+  padding-top: 26px;
 }
 
 header {
