@@ -47,6 +47,7 @@ type alias Model =
   , settings : Settings
   , notification : Maybe String
   , dragging : Maybe ( String, Position )
+  , resizing : Maybe ( String, Int )
   , context_menu : ContextMenu Context
   }
 
@@ -74,6 +75,7 @@ init flags =
       , next_id = ""
       , notification = Nothing
       , dragging = Nothing
+      , resizing  = Nothing
       , context_menu = context_menu
       }
     , Cmd.batch
@@ -166,6 +168,11 @@ update msg model =
                 ( { model | dragging = Nothing }
                 , queueRecord r
                 )
+              ResizeStart x -> ( { model | resizing = Just (id, x) }, Cmd.none )
+              ResizeEnd x ->
+                ( { model | resizing = Nothing }
+                , queueRecord r
+                )
               Focus -> if r.focused then ( model, Cmd.none ) else update UnfocusAll model
               ChangeKey _ _ ->
                 ( model
@@ -222,7 +229,14 @@ subscriptions model =
   Sub.batch
     [ gotId NextBlankId
     , case model.dragging of
-      Nothing -> Sub.none
+      Nothing ->
+        case model.resizing of
+          Nothing -> Sub.none
+          Just (id, initial) ->
+            Sub.batch
+              [ Mouse.moves (\{x, y} -> RecordAction id <| ResizeAt (x - initial))
+              , Mouse.ups (\{x, y} -> (RecordAction id <| ResizeEnd x))
+              ]
       Just (id, base) ->
         Sub.batch
           [ Mouse.moves

@@ -115,6 +115,7 @@ header {
 
 .floating-view .record {
   overflow: hidden;
+  min-width: 110px;
 
   .id {
     float: right;
@@ -156,6 +157,15 @@ header {
         background-color: #ffe8d7;
       }
     }
+  }
+
+  .resizer {
+    position: absolute;
+    right: 0;
+    top: 1em;
+    bottom: 0;
+    width: 12px;
+    cursor: e-resize;
   }
 }
 

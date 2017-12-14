@@ -7,7 +7,7 @@ import Html exposing
   )
 import Html.Attributes exposing
   ( class, style, value, readonly
-  , title, attribute
+  , title, attribute, style
   )
 import Html.Events exposing (on, onWithOptions, onInput)
 import Html.Lazy exposing (..)
@@ -31,6 +31,7 @@ type alias Record =
   , c : Array String -- calculated values (or error message)
   , e : Array Bool   -- if key calculation is errored
   , pos : Position
+  , width : Int
   , focused : Bool
   }
 
@@ -46,6 +47,7 @@ add next_id default_keys records =
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys False )
       { x = 0, y = 0 }
+      180
       False
   in
     insert next_id rec records
@@ -67,6 +69,9 @@ type Msg
   = DragStart Position
   | DragAt Position
   | DragEnd Position
+  | ResizeStart Int
+  | ResizeAt Int
+  | ResizeEnd Int
   | ChangeKey Int String
   | ChangeValue Int String
   | AddNewKVWithValue String String
@@ -81,9 +86,8 @@ type Msg
 update : Msg -> Record -> (Record, Cmd Msg)
 update msg record =
   case msg of
-    DragStart _ -> ( record, Cmd.none )
     DragAt pos -> ( { record | pos = pos }, Cmd.none )
-    DragEnd _ -> ( record, Cmd.none )
+    ResizeAt width -> ( { record | width = width }, Cmd.none )
     ChangeKey idx newk ->
       let
         _ = Debug.log "idx" idx
@@ -138,7 +142,7 @@ update msg record =
         , Cmd.none
         )
     RecordContextMenuAction msg -> ( record, Cmd.none )
-    Noop -> ( record, Cmd.none )
+    _ -> ( record, Cmd.none )
 
 
 -- VIEW
@@ -148,6 +152,9 @@ viewFloating : Record -> Html Msg
 viewFloating rec =
   div
     [ class <| "record " ++ if rec.focused then "focused" else ""
+    , style
+      [ ( "width", (toString rec.width) ++ "px" )
+      ]
     , if rec.focused then attribute "n" "" else on "mousedown"
       -- dragging should only be triggered to an initially unfocused
       -- record, otherwise it would mess up with the native editing
@@ -176,6 +183,15 @@ viewFloating rec =
           ( Array.toList rec.v)
           ( Array.toList rec.c)
           ( Array.toList rec.e)
+    , if rec.focused
+      then div
+        [ class "resizer"
+        , on "mousedown"
+          <| Decode.map ResizeStart
+            <| Decode.map (\x -> x - rec.width)
+              ( Decode.field "pageX" Decode.int )
+        ] []
+      else text ""
     ]
 
 viewKV : Record -> Int -> String -> String -> String -> Bool -> Html Msg
