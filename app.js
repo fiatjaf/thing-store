@@ -37,6 +37,7 @@ db.allDocs({include_docs: true})
         id: doc._id,
         pos: doc.pos,
         width: doc.width || 180,
+        kind: typeof doc.kind === undefined ? null : doc.kind,
         k: doc.kv.map(kv => kv[0]),
         v: doc.kv.map(kv => kv[1]),
         c: doc.kv.map(kv => kv[1]),

@@ -11,7 +11,6 @@ import Array exposing (Array)
 import Hashbow exposing (hashbow)
 
 import Menu exposing (..)
-import Record exposing (Record)
 
 
 -- MODEL
@@ -33,6 +32,13 @@ type alias Kind =
   , color : String
   , default_fields : Array String
   }
+
+grabColor : Array Kind -> { a | kind : Maybe Int } -> String
+grabColor kinds kindable =
+  kindable.kind
+  |> Maybe.map
+    (\kindIndex -> Array.get kindIndex kinds |> Maybe.map .color |> Maybe.withDefault "")
+  |> Maybe.withDefault ""
 
 emptyKind = Kind "" "" Array.empty
 

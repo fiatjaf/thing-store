@@ -67,7 +67,8 @@ init flags =
     records = Dict.fromList <| List.map (\r -> ( r.id, r )) flags.records
     nrecords = Dict.size records
   in
-    ( { records = ( records |> if nrecords == 0 then add flags.blank Nothing else identity )
+    ( { records = ( records
+        |> if nrecords == 0 then add flags.blank Nothing Nothing else identity )
       , pending_saves = 0
       , view = FloatingView
       , page = HomePage
@@ -109,7 +110,7 @@ type Msg
   | SaveView
   | UnfocusAll
   | ChangeView View
-  | NewRecord (Maybe (Array String))
+  | NewRecord (Maybe (Int, Array String))
   | CopyRecord String
   | RecordAction String Record.Msg
   | SettingsAction Settings.Msg
@@ -145,15 +146,17 @@ update msg model =
       , Cmd.none
       )
     ChangeView v -> ( { model | view = v, dragging = Nothing }, Cmd.none )
-    NewRecord default_fields ->
-      ( { model | records = model.records |> add model.next_id default_fields }
+    NewRecord (Just (index, default_fields)) ->
+      ( { model | records = model.records
+          |> add model.next_id (Just index) (Just default_fields) }
       , requestId ()
       )
+    NewRecord Nothing -> update (NewRecord Nothing) model
     CopyRecord id ->
       case model.records |> get id of
         Nothing -> ( model, Cmd.none )
         Just base ->
-          ( { model | records = model.records |> add model.next_id (Just base.k) }
+          ( { model | records = model.records |> add model.next_id base.kind (Just base.k) }
           , requestId ()
           )
     RecordAction id rmsg ->
@@ -185,6 +188,8 @@ update msg model =
                   , queueRecord r
                   ]
                 )
+              ChangeKind _ -> ( model, queueRecord r )
+              RemoveKind -> ( model, queueRecord r )
               DeleteRow idx ->
                 ( model
                 , Cmd.batch
@@ -284,7 +289,7 @@ view model =
       [ ContextMenu.view
         Menu.config
         ContextMenuAction
-        viewContextMenuItems
+        ( viewContextMenuItems model.settings.config.kinds )
         model.context_menu
       ]
     , case model.page of
@@ -312,11 +317,11 @@ viewHome model =
           [ button [ class "button", onClick (NewRecord Nothing) ] [ text "New" ]
           , div [ class "dropdown-menu" ]
             [ div [ class "dropdown-content" ]
-              <| List.map
-                (\kind ->
+              <| List.indexedMap
+                (\index kind ->
                   a
                     [ class "dropdown-item"
-                    , onClick (NewRecord <| Just kind.default_fields)
+                    , onClick (NewRecord (Just (index, kind.default_fields)))
                     ] [ text <| "New '" ++ kind.name ++ "'" ]
                 )
               <| Array.toList model.settings.config.kinds
@@ -350,10 +355,13 @@ viewHome model =
       [ class "record-container"
       , onMouseDown UnfocusAll
       ]
-      [ case model.view of
+      [ let kinds = model.settings.config.kinds
+            color = grabColor kinds
+        in case model.view of
         FloatingView -> 
           div [ class "floating-view" ]
-            <| List.map (\(id, r) -> Html.map (RecordAction id) (lazy Record.viewFloating r))
+            <| List.map
+              (\(id, r) -> Html.map (RecordAction id) (lazy2 viewFloating (color r) r))
             <| Dict.toList model.records
         TableView ->
           let
@@ -373,19 +381,28 @@ viewHome model =
                 ]
               , tbody []
                 <| List.map
-                  (\(id, r) -> Html.map (RecordAction id) (lazy2 viewRow keys r))
+                  (\(id, r) -> Html.map (RecordAction id) (lazy3 viewRow kinds keys r))
                 <| Dict.toList model.records
               ]
         JSONView jq -> div [] []
       ]
     ]
 
-viewContextMenuItems : Context -> List (List ( ContextMenu.Item, Msg ))
-viewContextMenuItems context =
+viewContextMenuItems : Array Kind -> Context -> List (List ( ContextMenu.Item, Msg ))
+viewContextMenuItems kinds context =
   case context of
     BackgroundContext -> []
     RecordContext id ->
-      [ [ ( ContextMenu.item "Copy record template", CopyRecord id )
+      [ kinds
+        |> Array.toList
+        |> List.indexedMap
+          (\index kind ->
+            ( ContextMenu.item ("Change kind to " ++ kind.name)
+            , RecordAction id (ChangeKind index)
+            )
+          )
+        |> (::) ( ContextMenu.item "Remove kind", RecordAction id RemoveKind )
+      , [ ( ContextMenu.item "Copy record template", CopyRecord id )
         ]
       ]
     KeyValueContext id idx ->

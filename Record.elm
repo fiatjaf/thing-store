@@ -17,6 +17,7 @@ import Array exposing (Array, slice)
 import Mouse exposing (Position)
 import ContextMenu
 
+import Settings exposing (..)
 import Menu exposing (..)
 import Helpers exposing (..)
 
@@ -32,11 +33,12 @@ type alias Record =
   , e : Array Bool   -- if key calculation is errored
   , pos : Position
   , width : Int
+  , kind : Maybe Int
   , focused : Bool
   }
 
-add : String -> Maybe (Array String) -> Dict String Record -> Dict String Record
-add next_id default_keys records =
+add : String -> Maybe Int -> Maybe (Array String) -> Dict String Record -> Dict String Record
+add next_id kind default_keys records =
   let
     keys = Maybe.withDefault (Array.fromList [""]) default_keys
     nkeys = Array.length keys
@@ -48,6 +50,7 @@ add next_id default_keys records =
       ( Array.repeat nkeys False )
       { x = 0, y = 0 }
       180
+      kind
       False
   in
     insert next_id rec records
@@ -75,6 +78,8 @@ type Msg
   | ChangeKey Int String
   | ChangeValue Int String
   | AddNewKVWithValue String String
+  | ChangeKind Int
+  | RemoveKind
   | Focus
   | CalcResult Int String
   | CalcError Int String
@@ -114,6 +119,8 @@ update msg record =
         }
       , Cmd.none
       )
+    ChangeKind kind -> ( { record | kind = Just kind }, Cmd.none )
+    RemoveKind -> ( { record | kind = Nothing }, Cmd.none )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
       ( { record
@@ -148,13 +155,10 @@ update msg record =
 -- VIEW
 
 
-viewFloating : Record -> Html Msg
-viewFloating rec =
+viewFloating : String -> Record -> Html Msg
+viewFloating color rec =
   div
     [ class <| "record " ++ if rec.focused then "focused" else ""
-    , style
-      [ ( "width", (toString rec.width) ++ "px" )
-      ]
     , if rec.focused then attribute "n" "" else on "mousedown"
       -- dragging should only be triggered to an initially unfocused
       -- record, otherwise it would mess up with the native editing
@@ -166,9 +170,10 @@ viewFloating rec =
           ( Decode.field "pageX" Decode.int )
           ( Decode.field "pageY" Decode.int )
     , style
-      [ "position" => "absolute"
-      , "left" => px rec.pos.x
-      , "top" => px rec.pos.y
+      [ ( "position", "absolute" )
+      , ( "left", px rec.pos.x )
+      , ( "top", px rec.pos.y )
+      , ( "width", (toString rec.width) ++ "px" )
       ]
     , title rec.id
     , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
@@ -176,7 +181,10 @@ viewFloating rec =
     [ div [ class "id" ]
       [ span [ class "tag" ] [ text rec.id ]
       ]
-    , table [ preventOrFocus rec ] <|
+    , table
+        [ preventOrFocus rec
+        , style [ ( "border-color", color ) ]
+        ] <|
         List.map5 (viewKV rec)
           ( List.range 0 ((Array.length rec.k) - 1) )
           ( Array.toList rec.k)
@@ -213,8 +221,8 @@ viewKV rec idx k v c e =
       ]
     ]
 
-viewRow : List String -> Record -> Html Msg
-viewRow keys rec =
+viewRow : Array Kind -> List String -> Record -> Html Msg
+viewRow kinds keys rec =
   let
     fetch key =
       findIndex key (Array.toList rec.k)
