@@ -4,7 +4,7 @@ const PouchDB = require('pouchdb-core')
 const IDB = require('pouchdb-adapter-idb')
 
 const { calc, depGraph, recordStore, view } = require('./calc')
-const { id, debounceWithArgs, toPouch, toConfig } = require('./helpers')
+const { id, debounceWithArgs, toPouch } = require('./helpers')
 
 PouchDB.plugin(IDB)
 const db = new PouchDB('~')
@@ -27,8 +27,8 @@ db.allDocs({include_docs: true})
     var config = {
       kinds: []
     }
-    if (docs[0]._id === 'config') {
-      config = toConfig(docs.shift())
+    if (docs.length && docs[0]._id === 'config') {
+      config = docs.shift()
     }
 
     return [
@@ -172,6 +172,25 @@ function setupPorts (app) {
       .catch(e => {
         console.log('error saving queue', e)
         app.ports.notify.send(`Error saving ${docslist.length} records.`)
+      })
+  })
+
+  app.ports.saveConfig.subscribe(config => {
+    let doc = {
+      _id: 'config',
+      _rev: revCache['config'],
+      kinds: config.kinds
+    }
+
+    db.put(doc)
+      .then(res => {
+        revCache['config'] = res.rev
+        console.log('saved config', res)
+        app.ports.notify.send('Settings saved.')
+      })
+      .catch(e => {
+        console.log('error saving config', e)
+        app.ports.notify.send('Error saving settings.')
       })
   })
 }

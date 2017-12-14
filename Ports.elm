@@ -1,11 +1,13 @@
 port module Ports exposing (..)
 
 import Record exposing (..)
+import Settings exposing (..)
 
 
 port changedValue : (String, Int, String) -> Cmd msg
 port runView : String -> Cmd msg
 port queueRecord : Record -> Cmd msg
+port saveConfig : Config -> Cmd msg
 port saveToPouch : () -> Cmd msg
 port requestId : () -> Cmd msg
 

@@ -8,7 +8,9 @@ import Html exposing
 import Html.Attributes exposing (class, value, style, type_)
 import Html.Events exposing (onClick, onInput)
 import Array exposing (Array)
+import Hashbow exposing (hashbow)
 
+import Menu exposing (..)
 import Record exposing (Record)
 
 
@@ -32,19 +34,11 @@ type alias Kind =
   , default_fields : Array String
   }
 
-emptykind = Kind "" "#cb5454" Array.empty
+emptyKind = Kind "" "" Array.empty
 
 type Section
   = KindSection Int
 
--- toNormalRecord : Settings -> Record
--- toNormalRecord settings =
---   Record
---     "config"
---     ( Array.fromList
---       [ 
---       ]
---     )
 
 -- UPDATE
 
@@ -56,7 +50,7 @@ type Msg
 
 type KindMsg
   = KindName String
-  | KindField Int
+  | KindField Int String
   | KindColor String
   | SaveKind
 
@@ -70,12 +64,16 @@ update msg settings =
         emptykinds = settings.config.kinds
           |> Array.toList
           |> List.indexedMap (,)
-          |> List.filter (Tuple.second >> (==) emptykind)
+          |> List.filter (Tuple.second >> .name >> (==) "")
         (kinds,index) = case emptykinds of
           [] ->
-            ( settings.config.kinds |> Array.push emptykind
-            , Array.length settings.config.kinds
-            )
+            let
+              i = Array.length settings.config.kinds
+              color = hashbow <| toString i
+            in
+              ( settings.config.kinds |> Array.push { emptyKind | color = color }
+              , i
+              )
           (i,_)::_ -> ( settings.config.kinds, i )
       in
         ( { settings
@@ -94,8 +92,15 @@ update msg settings =
             (\kind -> case msg of
               KindName name -> { kind | name = name }
               KindColor color -> { kind | color = color }
-              KindField _ -> kind
-              SaveKind -> kind
+              KindField index value ->
+                { kind | default_fields = kind.default_fields
+                  |> ( if (index < (Array.length kind.default_fields))
+                       then Array.set index value
+                       else Array.push value
+                     )
+                  |> Array.filter (not << (==) "")
+                }
+              _ -> kind
             )
         kinds : Array Kind
         kinds = case kind of
@@ -104,7 +109,9 @@ update msg settings =
 
         config = settings.config
       in
-        ( { settings | config = { config | kinds = kinds } }, Cmd.none )
+        ( { settings | config = { config | kinds = kinds } }
+        , Cmd.none
+        )
 
 
 -- VIEW
@@ -178,6 +185,19 @@ viewKindEdit i kind =
       , div [ class "field-body" ]
         [ input [ class "input", type_ "color", value kind.color, onInput KindColor ] []
         ]
+      ]
+    , div [ class "field is-horizontal" ]
+      [ div [ class "field-label" ] [ label [] [ text "Default fields: " ] ]
+      , div [ class "field-body" ]
+        <| Array.toList
+        <| Array.indexedMap
+          (\index v ->
+            div []
+              [ input [ class "input", value v, onInput <| KindField index ] []
+              ]
+          )
+        <| Array.push ""
+        <| kind.default_fields
       ]
     , div [ class "field is-horizontal" ]
       [ div [ class "field-label" ] []

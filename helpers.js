@@ -38,18 +38,6 @@ module.exports.toSimplified = function toSimplified (elmRecord) {
   return o
 }
 
-module.exports.toConfig = function toConfig (elmRecord) {
-  return {
-    kinds: elmRecord.kv
-      .filter(([k]) => k.split('[')[0] === 'kind')
-      .map(([k, v]) => ({
-        id: parseInt(k.split('[')[1].slice(0, -1)),
-        name: v.name,
-        default_fields: v.defaultFields
-      }))
-  }
-}
-
 module.exports.toPouch = function toPouch (elmRecord) {
   return {
     _id: elmRecord.id,

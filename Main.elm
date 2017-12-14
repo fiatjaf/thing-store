@@ -191,9 +191,19 @@ update msg model =
             ( { m | records = m.records |> insert id r }
             , Cmd.batch [ mcmd, Cmd.map (RecordAction id) rcmd ]
             )
-    SettingsAction msg ->
-      let ( settings, cmd ) = Settings.update msg model.settings
-      in ( { model | settings = settings }, Cmd.map SettingsAction cmd )
+    SettingsAction smsg ->
+      let
+        (s, scmd) = Settings.update smsg model.settings
+        (m, mcmd) = case smsg of 
+          KindAction i SaveKind -> ( model, saveConfig model.settings.config )
+          _ -> ( model, Cmd.none )
+      in
+        ( { m | settings = s }
+        , Cmd.batch
+            [ Cmd.map SettingsAction scmd
+            , mcmd
+            ]
+        )
     ContextMenuAction msg ->
       let
         (context_menu, cmd) = ContextMenu.update msg model.context_menu
