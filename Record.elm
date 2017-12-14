@@ -34,27 +34,12 @@ type alias Record =
   , focused : Bool
   }
 
-add : String -> Dict String Record -> Dict String Record
-add id records =
+add : String -> Maybe (Array String) -> Dict String Record -> Dict String Record
+add next_id default_keys records =
   let
-    rec = Record
-      id
-      ( Array.fromList [ "" ] )
-      ( Array.fromList [ "" ] )
-      ( Array.fromList [ "" ] )
-      ( Array.fromList [ False ] )
-      { x = 0, y = 0 }
-      False
-  in
-    insert id rec records
-
-fromTemplate : String -> Record -> Record
-fromTemplate next_id rec =
-  let
-    keys = rec.k
+    keys = Maybe.withDefault (Array.fromList [""]) default_keys
     nkeys = Array.length keys
-  in
-    Record
+    rec = Record
       next_id
       keys
       ( Array.repeat nkeys "" )
@@ -62,6 +47,8 @@ fromTemplate next_id rec =
       ( Array.repeat nkeys False )
       { x = 0, y = 0 }
       False
+  in
+    insert next_id rec records
 
 newpair : Record -> Record
 newpair rec =

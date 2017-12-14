@@ -66,7 +66,7 @@ init flags =
     records = Dict.fromList <| List.map (\r -> ( r.id, r )) flags.records
     nrecords = Dict.size records
   in
-    ( { records = ( records |> if nrecords == 0 then add flags.blank else identity )
+    ( { records = ( records |> if nrecords == 0 then add flags.blank Nothing else identity )
       , pending_saves = 0
       , view = FloatingView
       , page = HomePage
@@ -107,7 +107,7 @@ type Msg
   | SaveView
   | UnfocusAll
   | ChangeView View
-  | NewRecord
+  | NewRecord (Maybe (Array String))
   | CopyRecord String
   | RecordAction String Record.Msg
   | SettingsAction Settings.Msg
@@ -143,15 +143,15 @@ update msg model =
       , Cmd.none
       )
     ChangeView v -> ( { model | view = v, dragging = Nothing }, Cmd.none )
-    NewRecord ->
-      ( { model | records = model.records |> add model.next_id }
+    NewRecord default_fields ->
+      ( { model | records = model.records |> add model.next_id default_fields }
       , requestId ()
       )
     CopyRecord id ->
-      case model.records |> get id |> Maybe.map (fromTemplate model.next_id) of
+      case model.records |> get id of
         Nothing -> ( model, Cmd.none )
-        Just copy ->
-          ( { model | records = model.records |> insert model.next_id copy }
+        Just base ->
+          ( { model | records = model.records |> add model.next_id (Just base.k) }
           , requestId ()
           )
     RecordAction id rmsg ->
@@ -294,7 +294,20 @@ viewHome model =
           ]
         ]
       , div [ class "column is-narrow" ]
-        [ button [ class "button", onClick NewRecord ] [ text "New" ]
+        [ div [ class "dropdown is-hoverable" ]
+          [ button [ class "button", onClick (NewRecord Nothing) ] [ text "New" ]
+          , div [ class "dropdown-menu" ]
+            [ div [ class "dropdown-content" ]
+              <| List.map
+                (\kind ->
+                  a
+                    [ class "dropdown-item"
+                    , onClick (NewRecord <| Just kind.default_fields)
+                    ] [ text <| "New '" ++ kind.name ++ "'" ]
+                )
+              <| Array.toList model.settings.config.kinds
+            ]
+          ]
         ]
       , div [ class "column is-narrow" ] <|
         case model.view of
