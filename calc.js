@@ -7,29 +7,22 @@ let jqLoaded = new Promise(resolve => setTimeout(resolve, 5000))
 var recordStore = module.exports.recordStore = {}
 
 module.exports.calc = function calc (currentId, formula) {
-  // build the object that will be passed to the formula
-  var base = {}
-
-  for (let _id in recordStore) {
-    base[_id] = toSimplified(recordStore[_id])
-  }
-
+  // the object that will be passed to the formula
   let currentRecord = toSimplified(recordStore[currentId])
-  for (let k in currentRecord) {
-    base[k] = currentRecord[k]
-  }
 
-  // custom variables and functions
-  let prelude = `
-  `
+  // all the other records, custom variables and functions
+  var prelude = ''
+  for (let _id in recordStore) {
+    prelude += `${JSON.stringify(toSimplified(recordStore[_id]))} as $${_id} | `
+  }
 
   // execute and return
   return jqLoaded
     .then(() =>
-      jq.raw(JSON.stringify(base), prelude + formula, ['-c'])
+      jq.raw(JSON.stringify(currentRecord), prelude + formula, ['-c'])
     )
     .catch(e => {
-      console.log(JSON.stringify(base), prelude + formula)
+      console.log(JSON.stringify(currentRecord), prelude + formula)
       if (e.message && e.message.slice(0, 10) === 'jq: error ') {
         e.message = e.message.slice(10)
         e.message = e.message.slice(0, 16) === '(at <stdin>:0): '
@@ -53,10 +46,7 @@ class DepGraph {
     // references to this entire record made from other kv-rows
     for (let ref in this.recordReferencesTo[source_id]) {
       let [ref_id, ref_idx] = ref.split('¬')
-
-      if (!(ref_id === source_id && ref_idx === source_idx.toString())) {
-        yield [ref_id, parseInt(ref_idx)]
-      }
+      yield [ref_id, parseInt(ref_idx)]
     }
 
     // references specific to this kv-row from other kv-rows
@@ -82,7 +72,7 @@ class DepGraph {
     let source = `${_id}¬${idx}`
 
     formula.replace(
-      /(^| |\W)\.(r\w{5}\b)(\.(\w+)|\["(\w+)"\])?/g,
+      /(^| |\W)\$(r\w{5}\b)(\.(\w+)|\["(\w+)"\])?/g,
       (fullmatch, _, target_id, key2, key1) => {
         let target_idx = recordStore[target_id].k.indexOf(key1 || key2)
         if (target_idx !== -1) {
@@ -95,10 +85,6 @@ class DepGraph {
         }
       }
     )
-
-    // always reference itself -- so when a kv pair change, recalc all others
-    setAt(this.recordReferencesTo, [_id, source])
-    setAt(this.recordReferencesFrom, [source, _id])
   }
 }
 

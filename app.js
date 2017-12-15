@@ -37,7 +37,7 @@ db.allDocs({include_docs: true})
         id: doc._id,
         pos: doc.pos,
         width: doc.width || 180,
-        kind: typeof doc.kind === undefined ? null : doc.kind,
+        kind: doc.kind === undefined ? null : doc.kind,
         k: doc.kv.map(kv => kv[0]),
         v: doc.kv.map(kv => kv[1]),
         c: doc.kv.map(kv => kv[1]),
@@ -79,8 +79,6 @@ function setupPorts (app) {
           depGraph.setReferencesFrom(_id, idx, formula)
           if (`${_id}¬${idx}` in prev_calls) {
             throw new Error('circular reference')
-          } else {
-            prev_calls[`${_id}¬${idx}`] = true
           }
 
           return calc(_id, formula)
@@ -89,15 +87,30 @@ function setupPorts (app) {
         }
       })
       .then(res => {
+        prev_calls[`${_id}¬${idx}`] = true
+
         if (res !== undefined) {
           app.ports.gotCalcResult.send([_id, idx, res])
           recordStore[_id].c[idx] = JSON.parse(res)
         }
       })
       .then(() => {
+        // external references (row or full-record refs)
         for (let [did, didx] of depGraph.referencesTo(_id, idx)) {
           let v = recordStore[did].v[didx]
           changedValue([did, didx, v, prev_calls])
+        }
+
+        // internal references (all other rows from this same record)
+        let current = recordStore[_id]
+        for (let other_idx = 0; other_idx < current.k.length; other_idx++) {
+          // jumping over prev_calls here saves the day
+          if (`${_id}¬${other_idx}` in prev_calls) {
+            continue
+          }
+
+          let v = current.v[other_idx]
+          changedValue([_id, other_idx, v, prev_calls])
         }
       })
       .catch(e => {
