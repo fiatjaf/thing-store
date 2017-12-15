@@ -3,7 +3,7 @@
 const PouchDB = require('pouchdb-core')
 const IDB = require('pouchdb-adapter-idb')
 
-const { calc, depGraph, recordStore, view } = require('./calc')
+const { calc, depGraph, recordStore, kindStore, settingsStore, view } = require('./calc')
 const { id, debounceWithArgs, toPouch } = require('./helpers')
 
 PouchDB.plugin(IDB)
@@ -30,6 +30,7 @@ db.allDocs({include_docs: true})
     if (docs.length && docs[0]._id === 'config') {
       config = docs.shift()
     }
+    settingsStore.config = config
 
     return [
       config,
@@ -56,6 +57,11 @@ db.allDocs({include_docs: true})
     // prepare records to use in formulas
     records.forEach(record => {
       recordStore[record.id] = record
+
+      if (record.kind) {
+        kindStore[record.kind] = kindStore[record.kind] || {}
+        kindStore[record.kind][record.id] = true
+      }
     })
 
     setupPorts(app)
@@ -156,6 +162,16 @@ function setupPorts (app) {
     recordStore[record.id] = record
   })
 
+  app.ports.changedKind.subscribe(([_id, prev, curr]) => {
+    if (prev) {
+      delete kindStore[prev][_id]
+    }
+    if (curr) {
+      kindStore[curr] = kindStore[curr] || {}
+      kindStore[curr][_id] = true
+    }
+  })
+
   app.ports.saveToPouch.subscribe(() => {
     let willSave = Object.keys(queue).length
 
@@ -188,6 +204,10 @@ function setupPorts (app) {
         console.log('error saving queue', e)
         app.ports.notify.send(`Error saving ${docslist.length} records.`)
       })
+  })
+
+  app.ports.changedConfig.subscribe(config => {
+    settingsStore.config = config
   })
 
   app.ports.saveConfig.subscribe(config => {

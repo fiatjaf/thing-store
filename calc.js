@@ -5,6 +5,8 @@ const { toSimplified, setAt } = require('./helpers')
 let jqLoaded = new Promise(resolve => setTimeout(resolve, 5000))
 
 var recordStore = module.exports.recordStore = {}
+var kindStore = module.exports.kindStore = {}
+var settingsStore = module.exports.settingsStore = {}
 
 module.exports.calc = function calc (currentId, formula) {
   // the object that will be passed to the formula
@@ -16,7 +18,20 @@ module.exports.calc = function calc (currentId, formula) {
     prelude += `${JSON.stringify(toSimplified(recordStore[_id]))} as $${_id} | `
   }
 
+  let idsByKindName = '{' +
+    Object.keys(kindStore)
+      .map(kind => {
+        let name = settingsStore.config.kinds[kind].name
+        return `"${name}":[` +
+          Object.keys(kindStore[kind]).map(_id => '$' + _id) +
+         ']'
+      }) +
+    '}'
+  prelude += `def kind(k): ${idsByKindName} | .[k]; `
+
   // execute and return
+  formula = formula || 'null'
+
   return jqLoaded
     .then(() =>
       jq.raw(JSON.stringify(currentRecord), prelude + formula, ['-c'])
@@ -28,7 +43,7 @@ module.exports.calc = function calc (currentId, formula) {
         e.message = e.message.slice(0, 16) === '(at <stdin>:0): '
           ? e.message.slice(16)
           : e.message
-      }
+      } 
       throw e
     })
 }

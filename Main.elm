@@ -188,8 +188,13 @@ update msg model =
                   , queueRecord r
                   ]
                 )
-              ChangeKind _ -> ( model, queueRecord r )
-              RemoveKind -> ( model, queueRecord r )
+              ChangeKind k ->
+                ( model
+                , Cmd.batch
+                  [ queueRecord r
+                  , changedKind (id, oldr.kind, k)
+                  ]
+                )
               DeleteRow idx ->
                 ( model
                 , Cmd.batch
@@ -207,7 +212,8 @@ update msg model =
       let
         (s, scmd) = Settings.update smsg model.settings
         (m, mcmd) = case smsg of 
-          KindAction i SaveKind -> ( model, saveConfig model.settings.config )
+          KindAction i SaveKind -> ( model, saveConfig s.config )
+          KindAction _ _ -> ( model, changedConfig s.config )
           _ -> ( model, Cmd.none )
       in
         ( { m | settings = s }
@@ -398,10 +404,10 @@ viewContextMenuItems kinds context =
         |> List.indexedMap
           (\index kind ->
             ( ContextMenu.item ("Change kind to " ++ kind.name)
-            , RecordAction id (ChangeKind index)
+            , RecordAction id (ChangeKind <| Just index)
             )
           )
-        |> (::) ( ContextMenu.item "Remove kind", RecordAction id RemoveKind )
+        |> (::) ( ContextMenu.item "Remove kind", RecordAction id (ChangeKind Nothing))
       , [ ( ContextMenu.item "Copy record template", CopyRecord id )
         ]
       ]

@@ -78,8 +78,7 @@ type Msg
   | ChangeKey Int String
   | ChangeValue Int String
   | AddNewKVWithValue String String
-  | ChangeKind Int
-  | RemoveKind
+  | ChangeKind (Maybe Int)
   | Focus
   | CalcResult Int String
   | CalcError Int String
@@ -119,8 +118,7 @@ update msg record =
         }
       , Cmd.none
       )
-    ChangeKind kind -> ( { record | kind = Just kind }, Cmd.none )
-    RemoveKind -> ( { record | kind = Nothing }, Cmd.none )
+    ChangeKind kind -> ( { record | kind = kind }, Cmd.none )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
       ( { record

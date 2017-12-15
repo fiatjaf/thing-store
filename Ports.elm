@@ -5,6 +5,8 @@ import Settings exposing (..)
 
 
 port changedValue : (String, Int, String) -> Cmd msg
+port changedKind : (String, Maybe Int, Maybe Int) -> Cmd msg
+port changedConfig : Config -> Cmd msg
 port runView : String -> Cmd msg
 port queueRecord : Record -> Cmd msg
 port saveConfig : Config -> Cmd msg
