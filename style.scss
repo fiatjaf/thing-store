@@ -123,12 +123,11 @@ header {
   }
 
   table {
-    border: 2px solid cyan;
+    border: 2px solid white;
   }
 
-
   &.focused {
-    table { background-color: white; }
+    table { background-color: whitesmoke; }
   }
 
   td, th {
@@ -170,8 +169,10 @@ header {
 }
 
 .table-view .record {
+  border: 2px solid white;
+
   &.focused {
-    background-color: white;
+    background-color: whitesmoke;
   }
 
   &.unset {

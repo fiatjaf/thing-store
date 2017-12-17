@@ -15,6 +15,7 @@ import Dict exposing (Dict, insert, get)
 import Json.Decode as Decode
 import Array exposing (Array, slice)
 import Mouse exposing (Position)
+import Maybe.Extra exposing (..)
 import ContextMenu
 
 import Settings exposing (..)
@@ -153,8 +154,8 @@ update msg record =
 -- VIEW
 
 
-viewFloating : String -> Record -> Html Msg
-viewFloating color rec =
+viewFloating : Maybe Kind -> Record -> Html Msg
+viewFloating mkind rec =
   div
     [ class <| "record " ++ if rec.focused then "focused" else ""
     , if rec.focused then attribute "n" "" else on "mousedown"
@@ -173,7 +174,7 @@ viewFloating color rec =
       , ( "top", px rec.pos.y )
       , ( "width", (toString rec.width) ++ "px" )
       ]
-    , title rec.id
+    , title <| unwrap "--no-kind--" .name mkind
     , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
     ]
     [ div [ class "id" ]
@@ -181,7 +182,7 @@ viewFloating color rec =
       ]
     , table
         [ preventOrFocus rec
-        , style [ ( "border-color", color ) ]
+        , style [ ( "border-color", unwrap "" .color mkind ) ]
         ] <|
         List.map5 (viewKV rec)
           ( List.range 0 ((Array.length rec.k) - 1) )
@@ -219,8 +220,8 @@ viewKV rec idx k v c e =
       ]
     ]
 
-viewRow : Array Kind -> List String -> Record -> Html Msg
-viewRow kinds keys rec =
+viewRow : Maybe Kind -> List String -> Record -> Html Msg
+viewRow mkind keys rec =
   let
     fetch key =
       findIndex key (Array.toList rec.k)
@@ -237,6 +238,8 @@ viewRow kinds keys rec =
       [ class <| "record " ++ if rec.focused then "focused" else ""
       , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
       , preventOrFocus rec
+      , title <| unwrap "--no kind--" .name mkind
+      , style [ ( "border-color", unwrap "" .color mkind ) ]
       ]
       <| (::) (th [] [ text rec.id ])
       <| List.map2 (lazy3 viewCell rec)

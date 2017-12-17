@@ -8,6 +8,7 @@ import Html exposing
 import Html.Attributes exposing (class, value, style, type_)
 import Html.Events exposing (onClick, onInput)
 import Array exposing (Array)
+import Maybe.Extra exposing (..)
 import Hashbow exposing (hashbow)
 
 import Menu exposing (..)
@@ -33,12 +34,11 @@ type alias Kind =
   , default_fields : Array String
   }
 
-grabColor : Array Kind -> { a | kind : Maybe Int } -> String
-grabColor kinds kindable =
+grabKind : Array Kind -> { a | kind : Maybe Int } -> Maybe Kind
+grabKind kinds kindable =
   kindable.kind
-  |> Maybe.map
-    (\kindIndex -> Array.get kindIndex kinds |> Maybe.map .color |> Maybe.withDefault "")
-  |> Maybe.withDefault ""
+  |> Maybe.map (\kindIndex -> Array.get kindIndex kinds)
+  |> join
 
 emptyKind = Kind "" "" Array.empty
 

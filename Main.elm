@@ -362,12 +362,12 @@ viewHome model =
       , onMouseDown UnfocusAll
       ]
       [ let kinds = model.settings.config.kinds
-            color = grabColor kinds
+            kind = grabKind kinds
         in case model.view of
         FloatingView -> 
           div [ class "floating-view" ]
             <| List.map
-              (\(id, r) -> Html.map (RecordAction id) (lazy2 viewFloating (color r) r))
+              (\(id, r) -> Html.map (RecordAction id) (lazy2 viewFloating (kind r) r))
             <| Dict.toList model.records
         TableView ->
           let
@@ -387,7 +387,7 @@ viewHome model =
                 ]
               , tbody []
                 <| List.map
-                  (\(id, r) -> Html.map (RecordAction id) (lazy3 viewRow kinds keys r))
+                  (\(id, r) -> Html.map (RecordAction id) (lazy3 viewRow (kind r) keys r))
                 <| Dict.toList model.records
               ]
         JSONView jq -> div [] []
