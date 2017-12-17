@@ -165,10 +165,22 @@ function setupPorts (app) {
   app.ports.changedKind.subscribe(([_id, prev, curr]) => {
     if (prev) {
       delete kindStore[prev][_id]
+
+      let kindName = settingsStore.config.kinds[prev].name
+      for (let [did, didx] of depGraph.referencesToKind(kindName)) {
+        let v = recordStore[did].v[didx]
+        changedValue([did, didx, v])
+      }
     }
     if (curr) {
       kindStore[curr] = kindStore[curr] || {}
       kindStore[curr][_id] = true
+
+      let kindName = settingsStore.config.kinds[curr].name
+      for (let [did, didx] of depGraph.referencesToKind(kindName)) {
+        let v = recordStore[did].v[didx]
+        changedValue([did, didx, v])
+      }
     }
   })
 

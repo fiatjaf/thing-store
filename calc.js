@@ -43,13 +43,16 @@ module.exports.calc = function calc (currentId, formula) {
         e.message = e.message.slice(0, 16) === '(at <stdin>:0): '
           ? e.message.slice(16)
           : e.message
-      } 
+      }
       throw e
     })
 }
 
 class DepGraph {
   constructor () {
+    this.kindReferencesFrom = {}
+    this.kindReferencesTo = {}
+
     this.recordReferencesFrom = {}
     this.recordReferencesTo = {}
 
@@ -57,7 +60,23 @@ class DepGraph {
     this.rowReferencesTo = {}
   }
 
+  * referencesToKind (kindName) {
+    for (let ref in this.kindReferencesTo[kindName]) {
+      let [ref_id, ref_idx] = ref.split('¬')
+      yield [ref_id, parseInt(ref_idx)]
+    }
+  }
+
   * referencesTo (source_id, source_idx) {
+    // references to this kind made from other kv-rows
+    let source_kind = recordStore[source_id].kind
+    if (source_kind) {
+      let kindName = settingsStore.config.kinds[source_kind].name
+      if (kindName) {
+        yield * this.referencesToKind(kindName)
+      }
+    }
+
     // references to this entire record made from other kv-rows
     for (let ref in this.recordReferencesTo[source_id]) {
       let [ref_id, ref_idx] = ref.split('¬')
@@ -72,6 +91,11 @@ class DepGraph {
   }
 
   clearReferencesFrom (source_id, source_idx) {
+    for (let kind in this.kindReferencesFrom[`${source_id}¬${source_idx}`]) {
+      delete this.kindReferencesFrom[`${source_id}¬${source_idx}`]
+      delete this.kindReferencesTo[kind][`${source_id}¬${source_idx}`]
+    }
+
     for (let ref_id in this.recordReferencesFrom[`${source_id}¬${source_idx}`]) {
       delete this.recordReferencesFrom[`${source_id}¬${source_idx}`]
       delete this.recordReferencesTo[ref_id][`${source_id}¬${source_idx}`]
@@ -85,6 +109,11 @@ class DepGraph {
 
   setReferencesFrom (_id, idx, formula) {
     let source = `${_id}¬${idx}`
+
+    formula.replace(/kind\("([^"]+)"\)/g, (fullmatch, kind) => {
+      setAt(this.kindReferencesTo, [kind, source], true)
+      setAt(this.kindReferencesFrom, [source, kind], true)
+    })
 
     formula.replace(
       /(^| |\W)\$(r\w{5}\b)(\.(\w+)|\["(\w+)"\])?/g,
