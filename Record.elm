@@ -17,9 +17,9 @@ import Array exposing (Array, slice)
 import Mouse exposing (Position)
 import Maybe.Extra exposing (..)
 import ContextMenu
+import Select
 
 import Settings exposing (..)
-import Menu exposing (..)
 import Helpers exposing (..)
 
 
@@ -32,11 +32,43 @@ type alias Record =
   , v : Array String -- values
   , c : Array String -- calculated values (or error message)
   , e : Array Bool   -- if key calculation is errored
+  , l : Array Bool   -- if kv should be considered a link to an external record
   , pos : Position
   , width : Int
   , kind : Maybe Int
   , focused : Bool
+  , select_state : Select.State
   }
+
+type alias RestrictedRecord =
+  { id : String
+  , k : Array String
+  , v : Array String
+  , c : Array String
+  , e : Array Bool
+  , l : Array Bool
+  , pos : Position
+  , width : Int
+  , kind : Maybe Int
+  }
+
+toRestricted : Record -> RestrictedRecord
+toRestricted r =
+  RestrictedRecord r.id r.k r.v r.c r.e r.l r.pos r.width r.kind
+
+fromRestricted : RestrictedRecord -> Record
+fromRestricted rr = Record
+  rr.id
+  rr.k
+  rr.v
+  rr.c
+  rr.e
+  rr.l
+  rr.pos
+  rr.width
+  rr.kind
+  False
+  ( Select.newState rr.id )
 
 add : String -> Maybe Int -> Maybe (Array String) -> Dict String Record -> Dict String Record
 add next_id kind default_keys records =
@@ -49,10 +81,12 @@ add next_id kind default_keys records =
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys False )
+      ( Array.repeat nkeys False )
       { x = 0, y = 0 }
       180
       kind
       False
+      ( Select.newState next_id )
   in
     insert next_id rec records
 
@@ -63,7 +97,28 @@ newpair rec =
     , v = Array.push "" rec.v
     , c = Array.push "" rec.c
     , e = Array.push False rec.e
+    , l = Array.push False rec.l
   }
+
+selectConfig : Select.Config Msg Record
+selectConfig =
+  Select.newConfig SelectLinked .id
+    |> Select.withCutoff 5
+    |> Select.withInputStyles [ ( "padding", "0.5rem" ), ( "outline", "none" ) ]
+    |> Select.withItemClass "border-bottom border-silver p1 gray"
+    |> Select.withItemStyles [ ( "font-size", "1rem" ) ]
+    |> Select.withMenuClass "border border-gray"
+    |> Select.withMenuStyles [ ( "background", "white" ) ]
+    |> Select.withNotFoundShown False
+    |> Select.withHighlightedItemClass "bg-silver"
+    |> Select.withHighlightedItemStyles [ ( "color", "black" ) ]
+    |> Select.withPrompt "CHOOSE: "
+    |> Select.withPromptClass "grey"
+
+type MenuContext
+  = BackgroundContext
+  | RecordContext Record
+  | KeyValueContext Record Int
 
 
 -- UPDATE
@@ -80,11 +135,14 @@ type Msg
   | ChangeValue Int String
   | AddNewKVWithValue String String
   | ChangeKind (Maybe Int)
+  | ChangeLinked Bool Int
   | Focus
   | CalcResult Int String
   | CalcError Int String
   | DeleteRow Int
-  | RecordContextMenuAction (ContextMenu.Msg Context)
+  | SelectLinked (Maybe Record)
+  | SelectAction (Select.Msg Record)
+  | RecordContextMenuAction (ContextMenu.Msg MenuContext)
   | Noop
 
 
@@ -120,6 +178,10 @@ update msg record =
       , Cmd.none
       )
     ChangeKind kind -> ( { record | kind = kind }, Cmd.none )
+    ChangeLinked linked idx ->
+      ( { record | l = record.l |> Array.set idx linked }
+      , Cmd.none
+      )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
       ( { record
@@ -147,6 +209,10 @@ update msg record =
           }
         , Cmd.none
         )
+    SelectLinked mrecord -> ( record, Cmd.none )
+    SelectAction subMsg ->
+      let (updated, cmd) = Select.update selectConfig subMsg record.select_state
+      in ( { record | select_state = updated }, cmd )
     RecordContextMenuAction msg -> ( record, Cmd.none )
     _ -> ( record, Cmd.none )
 
@@ -175,7 +241,7 @@ viewFloating mkind rec =
       , ( "width", (toString rec.width) ++ "px" )
       ]
     , title <| unwrap "--no-kind--" .name mkind
-    , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
+    , ContextMenu.open RecordContextMenuAction (RecordContext rec)
     ]
     [ div [ class "id" ]
       [ span [ class "tag" ] [ text rec.id ]
@@ -184,12 +250,11 @@ viewFloating mkind rec =
         [ preventOrFocus rec
         , style [ ( "border-color", unwrap "" .color mkind ) ]
         ] <|
-        List.map5 (viewKV rec)
+        List.map4 (viewKV rec)
           ( List.range 0 ((Array.length rec.k) - 1) )
           ( Array.toList rec.k)
-          ( Array.toList rec.v)
-          ( Array.toList rec.c)
-          ( Array.toList rec.e)
+          ( List.map2 (,) ( Array.toList rec.v) ( Array.toList rec.c) )
+          ( List.map2 (,) ( Array.toList rec.e) ( Array.toList rec.l ) )
     , if rec.focused
       then div
         [ class "resizer"
@@ -201,9 +266,12 @@ viewFloating mkind rec =
       else text ""
     ]
 
-viewKV : Record -> Int -> String -> String -> String -> Bool -> Html Msg
-viewKV rec idx k v c e =
-  tr [ ContextMenu.open RecordContextMenuAction (KeyValueContext rec.id idx) ]
+viewKV : Record -> Int -> String -> (String, String) -> (Bool, Bool) -> Html Msg
+viewKV rec idx k (v,c) (e,l) =
+  tr
+    [ ContextMenu.open RecordContextMenuAction (KeyValueContext rec idx)
+    , class <| if l then "linked" else ""
+    ]
     [ th []
       [ input
         [ value k
@@ -211,12 +279,17 @@ viewKV rec idx k v c e =
         , readonly <| not rec.focused
         ] []
       ]
-    , td [ class <| if e && not rec.focused then "error" else "", title c ]
-      [ input
-        [ value <| if rec.focused then v else c
-        , onInput <| ChangeValue idx
-        , readonly <| not rec.focused
-        ] []
+    , td [ class <| if e && not rec.focused then "error" else "", title c ] <|
+      [ if l 
+        then
+          Html.map SelectAction
+            ( Select.view selectConfig rec.select_state [] Nothing)
+        else
+          input
+            [ value <| if rec.focused then v else c
+            , onInput <| ChangeValue idx
+            , readonly <| not rec.focused
+            ] []
       ]
     ]
 
@@ -236,7 +309,7 @@ viewRow mkind keys rec =
   in
     tr
       [ class <| "record " ++ if rec.focused then "focused" else ""
-      , ContextMenu.open RecordContextMenuAction (RecordContext rec.id)
+      , ContextMenu.open RecordContextMenuAction (RecordContext rec)
       , preventOrFocus rec
       , title <| unwrap "--no kind--" .name mkind
       , style [ ( "border-color", unwrap "" .color mkind ) ]

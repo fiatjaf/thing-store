@@ -11,8 +11,6 @@ import Array exposing (Array)
 import Maybe.Extra exposing (..)
 import Hashbow exposing (hashbow)
 
-import Menu exposing (..)
-
 
 -- MODEL
 

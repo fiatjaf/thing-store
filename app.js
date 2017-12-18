@@ -43,6 +43,7 @@ db.allDocs({include_docs: true})
         v: doc.kv.map(kv => kv[1]),
         c: doc.kv.map(kv => kv[1]),
         e: doc.kv.map(() => false),
+        l: doc.l ? doc.l : doc.kv.map(() => false),
         focused: false
       }))
     ]
@@ -82,7 +83,7 @@ function setupPorts (app) {
         if (value[0] === '=') {
           let formula = value.slice(1)
 
-          depGraph.setReferencesFrom(_id, idx, formula)
+          depGraph.gatherReferencesFrom(_id, idx, formula)
           if (`${_id}¬${idx}` in prev_calls) {
             throw new Error('circular reference')
           }
@@ -152,7 +153,7 @@ function setupPorts (app) {
   )
 
   var queue = {}
-  app.ports.queueRecord.subscribe(record => {
+  app.ports.queueSaveRecord.subscribe(record => {
     // this must be updated
     queue[record.id] = true
 

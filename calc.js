@@ -107,7 +107,7 @@ class DepGraph {
     }
   }
 
-  setReferencesFrom (_id, idx, formula) {
+  gatherReferencesFrom (_id, idx, formula) {
     let source = `${_id}¬${idx}`
 
     formula.replace(/kind\("([^"]+)"\)/g, (fullmatch, kind) => {

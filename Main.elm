@@ -10,12 +10,12 @@ import Dict exposing (Dict, insert, get)
 import Array exposing (Array)
 import Set exposing (Set)
 import Platform.Sub as Sub
+import Color
 import Mouse exposing (Position)
-import ContextMenu exposing (ContextMenu)
+import ContextMenu exposing (ContextMenu, item)
 
 import Record exposing (..)
 import Helpers exposing (..)
-import Menu exposing (..)
 import Settings exposing (..)
 import Ports exposing (..)
 
@@ -29,7 +29,7 @@ main =
     }
 
 type alias Flags =
-  { records : List Record
+  { records : List RestrictedRecord
   , config : Config
   , blank : String
   }
@@ -48,7 +48,7 @@ type alias Model =
   , notification : Maybe String
   , dragging : Maybe ( String, Position )
   , resizing : Maybe ( String, Int )
-  , context_menu : ContextMenu Context
+  , context_menu : ContextMenu MenuContext
   }
 
 type Page
@@ -64,7 +64,7 @@ init : Flags -> (Model, Cmd Msg)
 init flags =
   let
     (context_menu, msg) = ContextMenu.init
-    records = Dict.fromList <| List.map (\r -> ( r.id, r )) flags.records
+    records = Dict.fromList <| List.map (\r -> ( r.id, fromRestricted r )) flags.records
     nrecords = Dict.size records
   in
     ( { records = ( records
@@ -94,6 +94,19 @@ init flags =
       ]
     )
 
+menuConfig =
+  { width = 200
+  , direction = ContextMenu.RightBottom
+  , overflowX = ContextMenu.Mirror
+  , overflowY = ContextMenu.Mirror
+  , containerColor = Color.white
+  , hoverColor = Color.rgb 240 240 240
+  , invertText = False
+  , cursor = ContextMenu.Pointer
+  , rounded = False
+  , fontFamily = "inherit"
+  }
+
 
 -- UPDATE
 
@@ -114,7 +127,7 @@ type Msg
   | CopyRecord String
   | RecordAction String Record.Msg
   | SettingsAction Settings.Msg
-  | ContextMenuAction (ContextMenu.Msg Context)
+  | ContextMenuAction (ContextMenu.Msg MenuContext)
   | Noop
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -257,7 +270,7 @@ subscriptions model =
     , gotPendingSaves PendingSaves
     , gotCalcResult (\(id,idx,v) -> RecordAction id (CalcResult idx v))
     , gotCalcError (\(id,idx,v) -> RecordAction id (CalcError idx v))
-    , replaceRecords ReplaceRecords
+    , replaceRecords (List.map fromRestricted >> ReplaceRecords)
     , Sub.map ContextMenuAction (ContextMenu.subscriptions model.context_menu)
     , notify Notify
     ]
@@ -293,7 +306,7 @@ view model =
       |> Maybe.withDefault (text "")
     , div [ class "context-menu" ]
       [ ContextMenu.view
-        Menu.config
+        menuConfig
         ContextMenuAction
         ( viewContextMenuItems model.settings.config.kinds )
         model.context_menu
@@ -394,24 +407,35 @@ viewHome model =
       ]
     ]
 
-viewContextMenuItems : Array Kind -> Context -> List (List ( ContextMenu.Item, Msg ))
+viewContextMenuItems : Array Kind -> MenuContext -> List (List ( ContextMenu.Item, Msg ))
 viewContextMenuItems kinds context =
   case context of
     BackgroundContext -> []
-    RecordContext id ->
+    RecordContext rec ->
       [ kinds
         |> Array.toList
         |> List.indexedMap
           (\index kind ->
-            ( ContextMenu.item ("Change kind to " ++ kind.name)
-            , RecordAction id (ChangeKind <| Just index)
+            ( item ("Change kind to " ++ kind.name)
+            , RecordAction rec.id (ChangeKind <| Just index)
             )
           )
-        |> (::) ( ContextMenu.item "Remove kind", RecordAction id (ChangeKind Nothing))
-      , [ ( ContextMenu.item "Copy record template", CopyRecord id )
+        |> (::) ( item "Remove kind", RecordAction rec.id (ChangeKind Nothing))
+      , [ ( item "Copy record template", CopyRecord rec.id )
         ]
       ]
-    KeyValueContext id idx ->
-      [ [ ( ContextMenu.item "Delete row", RecordAction id (DeleteRow idx) )
+    KeyValueContext rec idx ->
+      [ [ ( item "Delete row", RecordAction rec.id (DeleteRow idx) )
+        ]
+      , [ case rec.l |> Array.get idx of
+            Nothing -> ( item "", Noop )
+            Just False ->
+              ( item "Set row as linked record"
+              , RecordAction rec.id (ChangeLinked True idx)
+              )
+            Just True ->
+              ( item "Turn row into normal record"
+              , RecordAction rec.id (ChangeLinked False idx)
+              )
         ]
       ]

@@ -42,6 +42,7 @@ module.exports.toPouch = function toPouch (elmRecord) {
   return {
     _id: elmRecord.id,
     kv: elmRecord.k.map((k, i) => [k, elmRecord.v[i]]),
+    l: elmRecord.l,
     pos: elmRecord.pos,
     width: elmRecord.width,
     kind: elmRecord.kind

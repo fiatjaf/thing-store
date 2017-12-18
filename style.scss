@@ -96,7 +96,7 @@ header {
 
   td {
     input {
-      padding-left: 5px;
+      padding: 0 0 0 5px !important;
 
       &:focus {
         background-color: #def6ff;
@@ -156,6 +156,14 @@ header {
         background-color: #ffe8d7;
       }
     }
+  }
+
+  tr.linked th::before {
+    content: '>';
+    display: block;
+    position: absolute;
+    color: #fff2d8;
+    left: 2px;
   }
 
   .resizer {
