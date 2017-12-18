@@ -43,7 +43,10 @@ db.allDocs({include_docs: true})
         v: doc.kv.map(kv => kv[1]),
         c: doc.kv.map(kv => kv[1]),
         e: doc.kv.map(() => false),
-        l: doc.l ? doc.l : doc.kv.map(() => false),
+        f: doc.f
+          ? doc.f
+            .map(({l}) => ({linked: l}))
+          : doc.kv.map(() => ({linked: false})),
         focused: false
       }))
     ]
@@ -89,6 +92,10 @@ function setupPorts (app) {
           }
 
           return calc(_id, formula)
+        } else if (value.slice(0, 2) === '@r') {
+          // track reference for linked record here.
+          let linked = recordStore[value.slice(1).trim()]
+          return linked._name || JSON.stringify(linked)
         } else {
           recordStore[_id].c[idx] = value
         }

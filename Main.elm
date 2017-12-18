@@ -10,6 +10,7 @@ import Dict exposing (Dict, insert, get)
 import Array exposing (Array)
 import Set exposing (Set)
 import Platform.Sub as Sub
+import Toolkit.Maybe as M
 import Color
 import Mouse exposing (Position)
 import ContextMenu exposing (ContextMenu, item)
@@ -49,6 +50,7 @@ type alias Model =
   , dragging : Maybe ( String, Position )
   , resizing : Maybe ( String, Int )
   , context_menu : ContextMenu MenuContext
+  , editing_linked : Maybe (String, Int)
   }
 
 type Page
@@ -78,6 +80,7 @@ init flags =
       , dragging = Nothing
       , resizing  = Nothing
       , context_menu = context_menu
+      , editing_linked = Nothing
       }
     , Cmd.batch
       [ requestId ()
@@ -125,6 +128,7 @@ type Msg
   | ChangeView View
   | NewRecord (Maybe (Int, Array String))
   | CopyRecord String
+  | StopEditingLinked
   | RecordAction String Record.Msg
   | SettingsAction Settings.Msg
   | ContextMenuAction (ContextMenu.Msg MenuContext)
@@ -172,6 +176,7 @@ update msg model =
           ( { model | records = model.records |> add model.next_id base.kind (Just base.k) }
           , requestId ()
           )
+    StopEditingLinked -> ( { model | editing_linked = Nothing }, Cmd.none )
     RecordAction id rmsg ->
       case get id model.records of
         Nothing -> ( model, Cmd.none )
@@ -208,6 +213,7 @@ update msg model =
                   , changedKind (id, oldr.kind, k)
                   ]
                 )
+              EditLinked to_edit -> ( { model | editing_linked = Just to_edit }, Cmd.none )
               DeleteRow idx ->
                 ( model
                 , Cmd.batch
@@ -405,6 +411,22 @@ viewHome model =
               ]
         JSONView jq -> div [] []
       ]
+    , case model.editing_linked of
+      Nothing -> text ""
+      Just (id, idx) ->
+        case Dict.get id model.records of
+          Nothing -> text ""
+          Just rec ->
+            case M.zip ( Array.get idx rec.k, Array.get idx rec.v ) of
+              Nothing -> text ""
+              Just kv ->
+                div
+                  [ class "foreground-field"
+                  , onClick StopEditingLinked
+                  ]
+                  [ Html.map (RecordAction rec.id)
+                    <| viewLinkedValue model.records rec idx kv
+                  ]
     ]
 
 viewContextMenuItems : Array Kind -> MenuContext -> List (List ( ContextMenu.Item, Msg ))
@@ -427,15 +449,17 @@ viewContextMenuItems kinds context =
     KeyValueContext rec idx ->
       [ [ ( item "Delete row", RecordAction rec.id (DeleteRow idx) )
         ]
-      , [ case rec.l |> Array.get idx of
+      , [ case rec.f |> Array.get idx of
             Nothing -> ( item "", Noop )
-            Just False ->
-              ( item "Set row as linked record"
-              , RecordAction rec.id (ChangeLinked True idx)
-              )
-            Just True ->
-              ( item "Turn row into normal record"
-              , RecordAction rec.id (ChangeLinked False idx)
-              )
+            Just field ->
+              if field.linked
+              then
+                ( item "Turn into normal"
+                , RecordAction rec.id (ChangeLinked False idx)
+                )
+              else
+                ( item "Turn into linked"
+                , RecordAction rec.id (ChangeLinked True idx)
+                )
         ]
       ]

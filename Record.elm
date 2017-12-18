@@ -9,10 +9,10 @@ import Html.Attributes exposing
   ( class, style, value, readonly
   , title, attribute, style
   )
-import Html.Events exposing (on, onWithOptions, onInput)
+import Html.Events exposing (on, onWithOptions, onInput, onDoubleClick)
 import Html.Lazy exposing (..)
 import Dict exposing (Dict, insert, get)
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (decodeString)
 import Array exposing (Array, slice)
 import Mouse exposing (Position)
 import Maybe.Extra exposing (..)
@@ -32,13 +32,16 @@ type alias Record =
   , v : Array String -- values
   , c : Array String -- calculated values (or error message)
   , e : Array Bool   -- if key calculation is errored
-  , l : Array Bool   -- if kv should be considered a link to an external record
+  , f : Array Field  -- field definitions
+  , selects : Array (Maybe Select.State)
   , pos : Position
   , width : Int
   , kind : Maybe Int
   , focused : Bool
-  , select_state : Select.State
   }
+
+type alias Field = { linked : Bool }
+defaultField = { linked = False }
 
 type alias RestrictedRecord =
   { id : String
@@ -46,7 +49,7 @@ type alias RestrictedRecord =
   , v : Array String
   , c : Array String
   , e : Array Bool
-  , l : Array Bool
+  , f : Array Field
   , pos : Position
   , width : Int
   , kind : Maybe Int
@@ -54,7 +57,7 @@ type alias RestrictedRecord =
 
 toRestricted : Record -> RestrictedRecord
 toRestricted r =
-  RestrictedRecord r.id r.k r.v r.c r.e r.l r.pos r.width r.kind
+  RestrictedRecord r.id r.k r.v r.c r.e r.f r.pos r.width r.kind
 
 fromRestricted : RestrictedRecord -> Record
 fromRestricted rr = Record
@@ -63,12 +66,12 @@ fromRestricted rr = Record
   rr.v
   rr.c
   rr.e
-  rr.l
+  rr.f
+  ( Array.repeat (Array.length rr.k) Nothing )
   rr.pos
   rr.width
   rr.kind
   False
-  ( Select.newState rr.id )
 
 add : String -> Maybe Int -> Maybe (Array String) -> Dict String Record -> Dict String Record
 add next_id kind default_keys records =
@@ -81,12 +84,12 @@ add next_id kind default_keys records =
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys False )
-      ( Array.repeat nkeys False )
+      ( Array.repeat nkeys defaultField )
+      ( Array.repeat nkeys Nothing )
       { x = 0, y = 0 }
       180
       kind
       False
-      ( Select.newState next_id )
   in
     insert next_id rec records
 
@@ -97,12 +100,13 @@ newpair rec =
     , v = Array.push "" rec.v
     , c = Array.push "" rec.c
     , e = Array.push False rec.e
-    , l = Array.push False rec.l
+    , f = Array.push defaultField rec.f
+    , selects = Array.push Nothing rec.selects
   }
 
-selectConfig : Select.Config Msg Record
-selectConfig =
-  Select.newConfig SelectLinked .id
+selectConfig : Int -> Select.Config Msg Record
+selectConfig idx =
+  Select.newConfig (SelectLinked idx) .id
     |> Select.withCutoff 5
     |> Select.withInputStyles [ ( "padding", "0.5rem" ), ( "outline", "none" ) ]
     |> Select.withItemClass "border-bottom border-silver p1 gray"
@@ -112,7 +116,7 @@ selectConfig =
     |> Select.withNotFoundShown False
     |> Select.withHighlightedItemClass "bg-silver"
     |> Select.withHighlightedItemStyles [ ( "color", "black" ) ]
-    |> Select.withPrompt "CHOOSE: "
+    |> Select.withPrompt ""
     |> Select.withPromptClass "grey"
 
 type MenuContext
@@ -136,12 +140,13 @@ type Msg
   | AddNewKVWithValue String String
   | ChangeKind (Maybe Int)
   | ChangeLinked Bool Int
+  | EditLinked (String, Int)
   | Focus
   | CalcResult Int String
   | CalcError Int String
   | DeleteRow Int
-  | SelectLinked (Maybe Record)
-  | SelectAction (Select.Msg Record)
+  | SelectLinked Int (Maybe Record)
+  | SelectAction Int (Select.Msg Record)
   | RecordContextMenuAction (ContextMenu.Msg MenuContext)
   | Noop
 
@@ -153,8 +158,6 @@ update msg record =
     ResizeAt width -> ( { record | width = width }, Cmd.none )
     ChangeKey idx newk ->
       let
-        _ = Debug.log "idx" idx
-        _ = Debug.log "k" record.k
         nr = { record | k = record.k |> Array.set idx newk }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
@@ -179,9 +182,17 @@ update msg record =
       )
     ChangeKind kind -> ( { record | kind = kind }, Cmd.none )
     ChangeLinked linked idx ->
-      ( { record | l = record.l |> Array.set idx linked }
-      , Cmd.none
-      )
+      let newrecord =
+        { record
+          | f = Array.get idx record.f
+            |> Maybe.map (\f -> { f | linked = linked })
+            |> Maybe.withDefault defaultField
+            |> \field -> Array.set idx field record.f
+        }
+      in
+        if linked
+        then update (EditLinked (record.id, idx)) newrecord
+        else ( newrecord, Cmd.none )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
       ( { record
@@ -209,10 +220,17 @@ update msg record =
           }
         , Cmd.none
         )
-    SelectLinked mrecord -> ( record, Cmd.none )
-    SelectAction subMsg ->
-      let (updated, cmd) = Select.update selectConfig subMsg record.select_state
-      in ( { record | select_state = updated }, cmd )
+    SelectLinked idx maybelinked ->
+      case maybelinked of
+        Nothing -> ( record, Cmd.none )
+        Just linked -> update (ChangeValue idx <| "@" ++ linked.id) record
+    SelectAction idx subMsg ->
+      let
+        state = ( join <| Array.get idx record.selects )
+          ? Select.newState (record.id ++ "¬" ++ toString idx)
+        (updated, cmd) = Select.update (selectConfig idx) subMsg state
+      in
+        ( { record | selects = record.selects |> Array.set idx (Just updated) }, cmd )
     RecordContextMenuAction msg -> ( record, Cmd.none )
     _ -> ( record, Cmd.none )
 
@@ -250,11 +268,15 @@ viewFloating mkind rec =
         [ preventOrFocus rec
         , style [ ( "border-color", unwrap "" .color mkind ) ]
         ] <|
-        List.map4 (viewKV rec)
+        List.map2 (lazy3 viewKV rec)
           ( List.range 0 ((Array.length rec.k) - 1) )
-          ( Array.toList rec.k)
-          ( List.map2 (,) ( Array.toList rec.v) ( Array.toList rec.c) )
-          ( List.map2 (,) ( Array.toList rec.e) ( Array.toList rec.l ) )
+          ( List.map5 (\a b c d e -> (a, b, c, d, e))
+            ( Array.toList rec.k )
+            ( Array.toList rec.v )
+            ( Array.toList rec.c )
+            ( Array.toList rec.e )
+            ( Array.toList rec.f )
+          )
     , if rec.focused
       then div
         [ class "resizer"
@@ -266,11 +288,11 @@ viewFloating mkind rec =
       else text ""
     ]
 
-viewKV : Record -> Int -> String -> (String, String) -> (Bool, Bool) -> Html Msg
-viewKV rec idx k (v,c) (e,l) =
+viewKV : Record -> Int -> (String, String, String, Bool, Field) -> Html Msg
+viewKV rec idx (k,v,c,e,f) =
   tr
     [ ContextMenu.open RecordContextMenuAction (KeyValueContext rec idx)
-    , class <| if l then "linked" else ""
+    , class <| if f.linked then "linked" else ""
     ]
     [ th []
       [ input
@@ -279,18 +301,37 @@ viewKV rec idx k (v,c) (e,l) =
         , readonly <| not rec.focused
         ] []
       ]
-    , td [ class <| if e && not rec.focused then "error" else "", title c ] <|
-      [ if l 
-        then
-          Html.map SelectAction
-            ( Select.view selectConfig rec.select_state [] Nothing)
-        else
-          input
-            [ value <| if rec.focused then v else c
-            , onInput <| ChangeValue idx
-            , readonly <| not rec.focused
-            ] []
+    , td [ class <| if e && not rec.focused then "error" else "", title c ]
+      [ input
+        [ value <| if rec.focused then v else c
+        , onInput <| ChangeValue idx
+        , onDoubleClick <| EditLinked (rec.id, idx)
+        , readonly <| not rec.focused
+        ] []
       ]
+    ]
+
+viewLinkedValue : Dict String Record -> Record -> Int -> (String, String) -> Html Msg
+viewLinkedValue records rec idx (key, value) =
+  div
+    [ onWithOptions
+        "click"
+        { stopPropagation = True, preventDefault = False }
+        ( Decode.succeed Noop )
+    ]
+    [ text key
+    , text ": "
+    , Html.map (SelectAction idx)
+      <| Select.view
+        ( selectConfig idx )
+        ( ( join <| Array.get idx rec.selects )
+          ? ( Select.newState (rec.id ++ "¬" ++ toString idx) )
+        )
+        ( Dict.values records )
+      <| join
+      <| Maybe.map (\id -> Dict.get id records)
+      <| Result.toMaybe
+      <| decodeString (Decode.field "#" Decode.string) value
     ]
 
 viewRow : Maybe Kind -> List String -> Record -> Html Msg
