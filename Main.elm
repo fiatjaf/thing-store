@@ -176,7 +176,7 @@ update msg model =
           ( { model | records = model.records |> add model.next_id base.kind (Just base.k) }
           , requestId ()
           )
-    StopEditingLinked -> ( { model | editing_linked = Nothing }, Cmd.none )
+    StopEditingLinked -> ( { model | editing_linked = Debug.log "stopping" Nothing }, Cmd.none )
     RecordAction id rmsg ->
       case get id model.records of
         Nothing -> ( model, Cmd.none )
@@ -213,7 +213,10 @@ update msg model =
                   , changedKind (id, oldr.kind, k)
                   ]
                 )
-              EditLinked to_edit -> ( { model | editing_linked = Just to_edit }, Cmd.none )
+              EditLinked to_edit ->
+                ( { model | editing_linked = Debug.log "editing" Just to_edit }
+                , Cmd.none
+                )
               DeleteRow idx ->
                 ( model
                 , Cmd.batch
@@ -417,15 +420,15 @@ viewHome model =
         case Dict.get id model.records of
           Nothing -> text ""
           Just rec ->
-            case M.zip ( Array.get idx rec.k, Array.get idx rec.v ) of
+            case M.zip3 ( Array.get idx rec.k, Array.get idx rec.v, Array.get idx rec.c ) of
               Nothing -> text ""
-              Just kv ->
+              Just kvc ->
                 div
                   [ class "foreground-field"
                   , onClick StopEditingLinked
                   ]
                   [ Html.map (RecordAction rec.id)
-                    <| viewLinkedValue model.records rec idx kv
+                    <| viewLinkedValue model.records rec idx kvc
                   ]
     ]
 

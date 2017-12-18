@@ -214,6 +214,8 @@ header {
   background-color: rgba(12, 234, 129, 0.4);
 
   & > div {
+    border: 5px solid white;
+    border-radius: 6px;
     width: 50%;
     height: 150px;
     min-width: 500px;
@@ -222,5 +224,19 @@ header {
     left: 25%;
     padding: 28px;
     background: whitesmoke;
+    color: #333;
+  }
+
+  .select-menu {
+    background-color: white;
+  }
+
+  .select-item {
+    color: #333;
+    padding: 2px 4px;
+
+    &.highlighted {
+      background-color: #456fff;
+    }
   }
 }

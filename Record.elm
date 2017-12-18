@@ -14,6 +14,9 @@ import Html.Lazy exposing (..)
 import Dict exposing (Dict, insert, get)
 import Json.Decode as Decode exposing (decodeString)
 import Array exposing (Array, slice)
+import String exposing (split, trim)
+import Task
+import List exposing (drop, head)
 import Mouse exposing (Position)
 import Maybe.Extra exposing (..)
 import ContextMenu
@@ -104,20 +107,25 @@ newpair rec =
     , selects = Array.push Nothing rec.selects
   }
 
+dumpPairs : Record -> String
+dumpPairs rec =
+  String.join ", "
+    <| List.map (\(k,v) -> k ++ "=" ++ v)
+    <| List.filter (\(k,v) -> trim k /= "" && trim v /= "")
+    <| List.map2 (,)
+      ( Array.toList rec.k )
+      ( Array.toList rec.c )
+
 selectConfig : Int -> Select.Config Msg Record
 selectConfig idx =
-  Select.newConfig (SelectLinked idx) .id
-    |> Select.withCutoff 5
-    |> Select.withInputStyles [ ( "padding", "0.5rem" ), ( "outline", "none" ) ]
-    |> Select.withItemClass "border-bottom border-silver p1 gray"
-    |> Select.withItemStyles [ ( "font-size", "1rem" ) ]
-    |> Select.withMenuClass "border border-gray"
-    |> Select.withMenuStyles [ ( "background", "white" ) ]
-    |> Select.withNotFoundShown False
-    |> Select.withHighlightedItemClass "bg-silver"
-    |> Select.withHighlightedItemStyles [ ( "color", "black" ) ]
+  Select.newConfig (SelectLinked idx) dumpPairs
+    |> Select.withCutoff 7
+    |> Select.withMenuClass "select-menu"
+    |> Select.withItemClass "select-item"
+    |> Select.withHighlightedItemClass "highlighted"
     |> Select.withPrompt ""
-    |> Select.withPromptClass "grey"
+    |> Select.withPromptClass "select-prompt"
+    |> Select.withNotFoundShown False
 
 type MenuContext
   = BackgroundContext
@@ -182,17 +190,17 @@ update msg record =
       )
     ChangeKind kind -> ( { record | kind = kind }, Cmd.none )
     ChangeLinked linked idx ->
-      let newrecord =
-        { record
+      ( { record
           | f = Array.get idx record.f
             |> Maybe.map (\f -> { f | linked = linked })
             |> Maybe.withDefault defaultField
             |> \field -> Array.set idx field record.f
         }
-      in
-        if linked
-        then update (EditLinked (record.id, idx)) newrecord
-        else ( newrecord, Cmd.none )
+      , if linked
+        then Task.succeed ()
+          |> Task.perform (\() -> EditLinked (record.id, idx))
+        else Cmd.none
+      )
     Focus -> ( { record | focused = True }, Cmd.none )
     CalcResult idx v ->
       ( { record
@@ -221,9 +229,13 @@ update msg record =
         , Cmd.none
         )
     SelectLinked idx maybelinked ->
-      case maybelinked of
-        Nothing -> ( record, Cmd.none )
-        Just linked -> update (ChangeValue idx <| "@" ++ linked.id) record
+      ( record
+      , case maybelinked of
+        Nothing -> Cmd.none
+        Just linked ->
+          Task.succeed ()
+            |> Task.perform (\() -> ChangeValue idx ("@" ++ linked.id))
+      )
     SelectAction idx subMsg ->
       let
         state = ( join <| Array.get idx record.selects )
@@ -305,14 +317,14 @@ viewKV rec idx (k,v,c,e,f) =
       [ input
         [ value <| if rec.focused then v else c
         , onInput <| ChangeValue idx
-        , onDoubleClick <| EditLinked (rec.id, idx)
+        , if f.linked then onDoubleClick <| EditLinked (rec.id, idx) else attribute "n" ""
         , readonly <| not rec.focused
         ] []
       ]
     ]
 
-viewLinkedValue : Dict String Record -> Record -> Int -> (String, String) -> Html Msg
-viewLinkedValue records rec idx (key, value) =
+viewLinkedValue : Dict String Record -> Record -> Int -> (String, String, String) -> Html Msg
+viewLinkedValue records rec idx (key, value, calc) =
   div
     [ onWithOptions
         "click"
@@ -325,13 +337,16 @@ viewLinkedValue records rec idx (key, value) =
       <| Select.view
         ( selectConfig idx )
         ( ( join <| Array.get idx rec.selects )
-          ? ( Select.newState (rec.id ++ "¬" ++ toString idx) )
+        ? ( Select.newState (rec.id ++ "¬" ++ toString idx) )
         )
         ( Dict.values records )
-      <| join
-      <| Maybe.map (\id -> Dict.get id records)
-      <| Result.toMaybe
-      <| decodeString (Decode.field "#" Decode.string) value
+        ( value
+          |> split "@"
+          |> drop 1
+          |> head
+          |> Maybe.map (flip Dict.get records)
+          |> join
+        )
     ]
 
 viewRow : Maybe Kind -> List String -> Record -> Html Msg
