@@ -31,6 +31,7 @@ import Helpers exposing (..)
 
 type alias Record =
   { id : String
+  , name : Maybe String
   , k : Array String -- keys
   , v : Array String -- values
   , c : Array String -- calculated values (or error message)
@@ -65,6 +66,7 @@ toRestricted r =
 fromRestricted : RestrictedRecord -> Record
 fromRestricted rr = Record
   rr.id
+  ( findIndex "@name" (Array.toList rr.k) |> Maybe.map (\idx -> Array.get idx rr.c) |> join )
   rr.k
   rr.v
   rr.c
@@ -83,6 +85,7 @@ add next_id kind default_keys records =
     nkeys = Array.length keys
     rec = Record
       next_id
+      Nothing
       keys
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys "" )
@@ -107,6 +110,9 @@ newpair rec =
     , selects = Array.push Nothing rec.selects
   }
 
+showRecord : Record -> String
+showRecord record = record.name ? dumpPairs record
+
 dumpPairs : Record -> String
 dumpPairs rec =
   String.join ", "
@@ -118,7 +124,7 @@ dumpPairs rec =
 
 selectConfig : Int -> Select.Config Msg Record
 selectConfig idx =
-  Select.newConfig (SelectLinked idx) dumpPairs
+  Select.newConfig (SelectLinked idx) showRecord
     |> Select.withCutoff 7
     |> Select.withMenuClass "select-menu"
     |> Select.withItemClass "select-item"
@@ -176,6 +182,9 @@ update msg record =
             | v = record.v |> Array.set idx newv
             , c = record.c |> Array.set idx newv
             , e = record.e |> Array.set idx False
+            , name = case Array.get idx record.k of
+              Just "@name" -> Just newv
+              _ -> record.name
           }
         nnr = if (Array.length nr.k) - 1 == idx then newpair nr else nr
       in ( nnr, Cmd.none )
@@ -206,6 +215,9 @@ update msg record =
       ( { record
           | c = record.c |> Array.set idx v
           , e = record.e |> Array.set idx False
+          , name = case Array.get idx record.k of
+            Just "@name" -> Just v
+            _ -> record.name
         }
       , Cmd.none
       )
@@ -315,7 +327,7 @@ viewKV rec idx (k,v,c,e,f) =
       ]
     , td [ class <| if e && not rec.focused then "error" else "", title c ]
       [ input
-        [ value <| if rec.focused then v else c
+        [ value <| if rec.focused then v else if f.linked then rec.name ? v else c
         , onInput <| ChangeValue idx
         , if f.linked then onDoubleClick <| EditLinked (rec.id, idx) else attribute "n" ""
         , readonly <| not rec.focused
