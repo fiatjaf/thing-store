@@ -79,3 +79,9 @@ module.exports.getAt = function getAt (object, path) {
 
   return o[path[0]]
 }
+
+module.exports.hash = function hash (_id, idx) { return `${_id}¬${idx}` }
+module.exports.unhash = function unhash (h) {
+  let [_id, idxstr] = h.split('¬')
+  return [_id, parseInt(idxstr)]
+}

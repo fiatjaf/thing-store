@@ -1,6 +1,6 @@
 const jq = require('jq-web/jq.wasm.js')
 
-const { toSimplified, getAt, setAt } = require('./helpers')
+const { toSimplified, hash, unhash, getAt, setAt } = require('./helpers')
 
 let jqLoaded = new Promise(resolve => setTimeout(resolve, 5000))
 
@@ -8,7 +8,10 @@ var recordStore = module.exports.recordStore = {}
 var kindStore = module.exports.kindStore = {}
 var settingsStore = module.exports.settingsStore = {}
 
-module.exports.calc = function calc (currentId, formula) {
+module.exports.calc = function calc (currentId, value) {
+  if (value[0] !== '=') return Promise.resolve()
+  let formula = value.slice(1)
+
   // the object that will be passed to the formula
   let current = recordStore[currentId]
   var currentRecord = toSimplified(current)
@@ -164,7 +167,56 @@ class DepGraph {
   }
 }
 
-module.exports.depGraph = new DepGraph()
+var depGraph = module.exports.depGraph = new DepGraph()
+
+// returns a list (actually a Set) of rows that must be recalc'ed, in order
+module.exports.recalc = recalc
+function recalc (from_id, from_idx, prev_list = new Set()) {
+  var local = new Set()
+  var list = new Set(prev_list)
+
+  // the changed row itself
+  console.log('here', from_id, from_idx)
+  let h = hash(from_id, from_idx)
+  local.add(h)
+  list.delete(h)
+  list.add(h)
+
+  // internal references (all other rows from this same record)
+  let current = recordStore[from_id]
+  for (let other_idx = 0; other_idx < current.k.length; other_idx++) {
+    if (other_idx === from_idx) continue
+    if (current.v[other_idx][0] !== '=') continue
+
+    console.log('local', from_id, other_idx)
+    let h = hash(from_id, other_idx)
+    local.add(h)
+    list.delete(h)
+    list.add(h)
+  }
+
+  var final_list = new Set(list)
+
+  // now, from the initial row and each affected local, search external refs
+  for (let h of local) {
+    let [l_id, l_idx] = unhash(h)
+
+    for (let [ext_id, ext_idx] of depGraph.referencesTo(l_id, l_idx)) {
+      console.log('external', ext_id, ext_idx)
+
+      if (prev_list.has(hash(ext_id, ext_idx))) {
+        throw new Error('circular reference')
+      }
+
+      for (let h of recalc(ext_id, ext_idx, list)) {
+        final_list.delete(h)
+        final_list.add(h)
+      }
+    }
+  }
+
+  return final_list
+}
 
 module.exports.view = function view (code) {
   return {}

@@ -2,9 +2,13 @@
 
 const PouchDB = require('pouchdb-core')
 const IDB = require('pouchdb-adapter-idb')
+const pSeries = require('p-series')
 
-const { calc, depGraph, recordStore, kindStore, settingsStore, view } = require('./calc')
-const { id, debounceWithArgs, toPouch } = require('./helpers')
+const {
+  calc, recalc, depGraph, recordStore,
+  kindStore, settingsStore, view
+} = require('./calc')
+const { id, debounceWithArgs, toPouch, hash, unhash } = require('./helpers')
 
 PouchDB.plugin(IDB)
 const db = new PouchDB('~')
@@ -86,45 +90,31 @@ function setupPorts (app) {
       .then(() => {
         if (value[0] === '=') {
           let formula = value.slice(1)
-
           depGraph.gatherReferencesFrom(_id, idx, formula)
-          if (`${_id}¬${idx}` in prev_calls) {
-            throw new Error('circular reference')
-          }
-
-          return calc(_id, formula)
         } else {
           depGraph.gatherLinks(_id, idx, value)
-
-          recordStore[_id].c[idx] = value
-        }
-      })
-      .then(res => {
-        prev_calls[`${_id}¬${idx}`] = true
-
-        if (res !== undefined) {
-          app.ports.gotCalcResult.send([_id, idx, res])
-          recordStore[_id].c[idx] = JSON.parse(res)
-        }
-      })
-      .then(() => {
-        // external references (row or full-record refs)
-        for (let [did, didx] of depGraph.referencesTo(_id, idx)) {
-          console.log('external', did, didx)
-          changedValue([did, didx, recordStore[did].v[didx], prev_calls])
         }
 
-        // internal references (all other rows from this same record)
-        let current = recordStore[_id]
-        for (let other_idx = 0; other_idx < current.k.length; other_idx++) {
-          // jumping over prev_calls here saves the day
-          if (`${_id}¬${other_idx}` in prev_calls) {
-            continue
-          }
+        var calcs = []
+        for (let h of recalc(_id, idx)) {
+          let [_id, idx] = unhash(h)
+          console.log('next_calc', _id, idx)
 
-          console.log('local', _id, other_idx)
-          changedValue([_id, other_idx, recordStore[_id].v[other_idx], prev_calls])
+          calcs.push(() => {
+            console.log('calculating', _id, idx)
+            calc(_id, recordStore[_id].v[idx])
+              .then(res => {
+                if (res) {
+                  app.ports.gotCalcResult.send([_id, idx, res])
+                  recordStore[_id].c[idx] = JSON.parse(res)
+                } else {
+                  recordStore[_id].c[idx] = recordStore[_id].v[idx]
+                }
+              })
+          })
         }
+
+        return pSeries(calcs)
       })
       .catch(e => {
         if (e.message === 'circular reference') {
@@ -134,8 +124,8 @@ function setupPorts (app) {
         }
 
         for (let errored in prev_calls) {
-          let [err_id, err_idx] = errored.split('¬')
-          app.ports.gotCalcError.send([err_id, parseInt(err_idx), e.message])
+          let [err_id, err_idx] = unhash(errored)
+          app.ports.gotCalcError.send([err_id, err_idx, e.message])
           recordStore[err_id].c[err_idx] = null
         }
       })
@@ -143,7 +133,7 @@ function setupPorts (app) {
   }
 
   app.ports.changedValue.subscribe(
-    debounceWithArgs(changedValue, 2000, args => args[0][0] + '¬' + args[0][1])
+    debounceWithArgs(changedValue, 2000, args => hash(args[0][0], args[0][1]))
   )
 
   function runView (code) {
