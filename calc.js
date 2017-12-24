@@ -141,12 +141,16 @@ class DepGraph {
       setAt(this.kindReferencesFrom, [source, kind], true)
     })
 
-    if (formula.match(/\| *link\b/g)) {
+    if (formula.match(/\| *link\b/)) {
+      console.log('formula match', formula)
       // if there any call to the link function, make this row depend on all
       // other records linked by this entire record
-      for (let link_id in getAt(this.linksFrom, [_id, idx])) {
-        setAt(this.recordReferencesTo, [link_id, source], true)
-        setAt(this.recordReferencesFrom, [source, link_id], true)
+      let by_idx = getAt(this.linksFrom, [_id])
+      for (let idx in by_idx) {
+        for (let link_id in by_idx[idx]) {
+          setAt(this.recordReferencesTo, [link_id, source], true)
+          setAt(this.recordReferencesFrom, [source, link_id], true)
+        }
       }
     }
 
