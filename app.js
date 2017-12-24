@@ -78,6 +78,7 @@ function setupPorts (app) {
   })
 
   function changedValue ([_id, idx, value, prev_calls = {}]) {
+    value = value.trim()
     recordStore[_id].v[idx] = value
     depGraph.clearReferencesFrom(_id, idx)
 
@@ -92,11 +93,9 @@ function setupPorts (app) {
           }
 
           return calc(_id, formula)
-        } else if (value.slice(0, 2) === '@r') {
-          // track reference for linked record here.
-          let linked = recordStore[value.slice(1).trim()]
-          return linked._name || JSON.stringify(linked)
         } else {
+          depGraph.gatherLinks(_id, idx, value)
+
           recordStore[_id].c[idx] = value
         }
       })
@@ -111,8 +110,8 @@ function setupPorts (app) {
       .then(() => {
         // external references (row or full-record refs)
         for (let [did, didx] of depGraph.referencesTo(_id, idx)) {
-          let v = recordStore[did].v[didx]
-          changedValue([did, didx, v, prev_calls])
+          console.log('external', did, didx)
+          changedValue([did, didx, recordStore[did].v[didx], prev_calls])
         }
 
         // internal references (all other rows from this same record)
@@ -123,8 +122,8 @@ function setupPorts (app) {
             continue
           }
 
-          let v = current.v[other_idx]
-          changedValue([_id, other_idx, v, prev_calls])
+          console.log('local', _id, other_idx)
+          changedValue([_id, other_idx, recordStore[_id].v[other_idx], prev_calls])
         }
       })
       .catch(e => {

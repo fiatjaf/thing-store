@@ -126,7 +126,10 @@ header {
     border: 2px solid white;
   }
 
+  z-index: 26;
   &.focused {
+    z-index: 27;
+
     table { background-color: whitesmoke; }
   }
 
@@ -205,6 +208,7 @@ header {
 }
 
 .foreground-field {
+  z-index: 99;
   position: absolute;
   top: 0;
   left: 0;

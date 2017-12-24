@@ -1,6 +1,6 @@
 const jq = require('jq-web/jq.wasm.js')
 
-const { toSimplified, setAt } = require('./helpers')
+const { toSimplified, getAt, setAt } = require('./helpers')
 
 let jqLoaded = new Promise(resolve => setTimeout(resolve, 5000))
 
@@ -10,7 +10,8 @@ var settingsStore = module.exports.settingsStore = {}
 
 module.exports.calc = function calc (currentId, formula) {
   // the object that will be passed to the formula
-  let currentRecord = toSimplified(recordStore[currentId])
+  let current = recordStore[currentId]
+  var currentRecord = toSimplified(current)
 
   // all the other records, custom variables and functions
   var prelude = ''
@@ -18,16 +19,27 @@ module.exports.calc = function calc (currentId, formula) {
     prelude += `${JSON.stringify(toSimplified(recordStore[_id]))} as $${_id} | `
   }
 
+  // a function kind(k) to fetch a list of records from the given kind
   let idsByKindName = '{' +
     Object.keys(kindStore)
       .map(kind => {
         let name = settingsStore.config.kinds[kind].name
-        return `"${name}":[` +
+        return `${name}:[` +
           Object.keys(kindStore[kind]).map(_id => '$' + _id) +
          ']'
-      }) +
+      })
+      .join(',') +
     '}'
   prelude += `def kind(k): ${idsByKindName} | .[k]; `
+
+  // a function 'link()' to fetch linked records
+  var variablesById = '{' +
+    current.v
+      .map(v => (v.slice(0, 2) === '@r') ? `"${v}": $${v.slice(1)}` : null)
+      .filter(x => x)
+      .join(',') +
+    '}'
+  prelude += `def link: ${variablesById}[.]; `
 
   // execute and return
   formula = formula || 'null'
@@ -58,6 +70,8 @@ class DepGraph {
 
     this.rowReferencesFrom = {}
     this.rowReferencesTo = {}
+
+    this.linksFrom = {}
   }
 
   * referencesToKind (kindName) {
@@ -91,29 +105,47 @@ class DepGraph {
   }
 
   clearReferencesFrom (source_id, source_idx) {
-    for (let kind in this.kindReferencesFrom[`${source_id}¬${source_idx}`]) {
-      delete this.kindReferencesFrom[`${source_id}¬${source_idx}`]
-      delete this.kindReferencesTo[kind][`${source_id}¬${source_idx}`]
+    let source = `${source_id}¬${source_idx}`
+
+    for (let kind in this.kindReferencesFrom[source]) {
+      delete this.kindReferencesFrom[source]
+      delete this.kindReferencesTo[kind][source]
     }
 
-    for (let ref_id in this.recordReferencesFrom[`${source_id}¬${source_idx}`]) {
-      delete this.recordReferencesFrom[`${source_id}¬${source_idx}`]
-      delete this.recordReferencesTo[ref_id][`${source_id}¬${source_idx}`]
+    for (let ref_id in this.recordReferencesFrom[source]) {
+      delete this.recordReferencesFrom[source]
+      delete this.recordReferencesTo[ref_id][source]
     }
 
-    for (let ref in this.rowReferencesFrom[`${source_id}¬${source_idx}`]) {
-      delete this.rowReferencesFrom[source_id]
-      delete this.rowReferencesTo[ref][`${source_id}¬${source_idx}`]
+    for (let ref in this.rowReferencesFrom[source]) {
+      delete this.rowReferencesFrom[source]
+      delete this.rowReferencesTo[ref][source]
+    }
+  }
+
+  gatherLinks (_id, idx, value) {
+    setAt(this.linksFrom, [_id, idx], {})
+    if (value.slice(0, 2) === '@r') {
+      setAt(this.linksFrom, [_id, idx, value.slice(1)], true)
     }
   }
 
   gatherReferencesFrom (_id, idx, formula) {
     let source = `${_id}¬${idx}`
 
-    formula.replace(/kind\("([^"]+)"\)/g, (fullmatch, kind) => {
+    formula.replace(/\bkind\("([^"]+)"\)/g, (fullmatch, kind) => {
       setAt(this.kindReferencesTo, [kind, source], true)
       setAt(this.kindReferencesFrom, [source, kind], true)
     })
+
+    if (formula.match(/\| *link\b/g)) {
+      // if there any call to the link function, make this row depend on all
+      // other records linked by this entire record
+      for (let link_id in getAt(this.linksFrom, [_id, idx])) {
+        setAt(this.recordReferencesTo, [link_id, source], true)
+        setAt(this.recordReferencesFrom, [source, link_id], true)
+      }
+    }
 
     formula.replace(
       /(^| |\W)\$(r\w{5}\b)(\.(\w+)|\["(\w+)"\])?/g,
