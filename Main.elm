@@ -110,7 +110,7 @@ type Msg
   | SaveView
   | UnfocusAll
   | ChangeView View
-  | NewRecord (Maybe (Int, Array String))
+  | NewRecord (Maybe (Int, Array (String, String)))
   | CopyRecord String
   | DeleteRecord String
   | StopEditingLinked
@@ -159,17 +159,32 @@ update msg model =
       , Cmd.none
       )
     ChangeView v -> ( { model | view = v, dragging = Nothing }, Cmd.none )
-    NewRecord (Just (index, default_fields)) ->
-      ( { model | records = model.records
-          |> add model.next_id (Just index) (Just default_fields) }
-      , requestId ()
-      )
-    NewRecord Nothing -> update (NewRecord Nothing) model
+    NewRecord param ->
+      case param of
+        Just (index, default_fields) ->
+          ( { model | records = model.records
+              |> add model.next_id (Just index) (Just default_fields) }
+          , requestId ()
+          )
+        Nothing ->
+          ( { model | records = model.records |> add model.next_id Nothing Nothing }
+          , requestId ()
+          )
     CopyRecord id ->
       case model.records |> get id of
         Nothing -> ( model, Cmd.none )
         Just base ->
-          ( { model | records = model.records |> add model.next_id base.kind (Just base.k) }
+          ( { model
+              | records = model.records
+                |> add model.next_id base.kind
+                  ( Just
+                    <| Array.fromList
+                    <| List.map2
+                      (\k v -> (k, if String.startsWith "=" v then v else ""))
+                      ( Array.toList base.k )
+                      ( Array.toList base.v )
+                  )
+            }
           , requestId ()
           )
     DeleteRecord id ->

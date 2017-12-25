@@ -16,6 +16,7 @@ import Json.Decode as Decode exposing (decodeString)
 import Array exposing (Array, slice)
 import String exposing (split, trim)
 import Task
+import Tuple exposing (first, second)
 import List exposing (drop, head)
 import Mouse exposing (Position)
 import Maybe.Extra exposing (..)
@@ -78,16 +79,30 @@ fromRestricted rr = Record
   rr.kind
   False
 
-add : String -> Maybe Int -> Maybe (Array String) -> Dict String Record -> Dict String Record
-add next_id kind default_keys records =
+add
+  : String
+  -> Maybe Int
+  -> Maybe (Array (String, String))
+  -> Dict String Record
+  -> Dict String Record
+add next_id kind mdefault_fields records =
   let
-    keys = Maybe.withDefault (Array.fromList [""]) default_keys
+    (keys, values) = Maybe.withDefault
+      ( Array.fromList [""], Array.fromList [""] )
+      ( Maybe.map
+        ( \default_fields ->
+          ( Array.map first default_fields
+          , Array.map second default_fields
+          )
+        )
+        mdefault_fields
+      )
     nkeys = Array.length keys
     rec = Record
       next_id
       Nothing
       keys
-      ( Array.repeat nkeys "" )
+      values
       ( Array.repeat nkeys "" )
       ( Array.repeat nkeys False )
       ( Array.repeat nkeys defaultField )

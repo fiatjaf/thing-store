@@ -4,8 +4,9 @@ import Html exposing
   ( Html, text, div, aside
   , p, ul, li, a, h2
   , label, input, button
+  , table, tr, td, th
   )
-import Html.Attributes exposing (class, value, style, type_)
+import Html.Attributes exposing (class, value, style, type_, placeholder)
 import Html.Events exposing (onClick, onInput)
 import Array exposing (Array)
 import Maybe.Extra exposing (..)
@@ -29,7 +30,7 @@ type alias Config =
 type alias Kind =
   { name : String
   , color : String
-  , default_fields : Array String
+  , default_fields : Array (String, String)
   }
 
 grabKind : Array Kind -> { a | kind : Maybe Int } -> Maybe Kind
@@ -54,7 +55,7 @@ type Msg
 
 type KindMsg
   = KindName String
-  | KindField Int String
+  | KindDefaultField Int (String, String)
   | KindColor String
   | SaveKind
 
@@ -96,13 +97,13 @@ update msg settings =
             (\kind -> case msg of
               KindName name -> { kind | name = name }
               KindColor color -> { kind | color = color }
-              KindField index value ->
+              KindDefaultField index field ->
                 { kind | default_fields = kind.default_fields
                   |> ( if (index < (Array.length kind.default_fields))
-                       then Array.set index value
-                       else Array.push value
+                       then Array.set index field
+                       else Array.push field
                      )
-                  |> Array.filter (not << (==) "")
+                  |> Array.filter (not << (==) ("", ""))
                 }
               _ -> kind
             )
@@ -193,15 +194,33 @@ viewKindEdit i kind =
     , div [ class "field is-horizontal" ]
       [ div [ class "field-label" ] [ label [] [ text "Default fields: " ] ]
       , div [ class "field-body" ]
-        <| Array.toList
-        <| Array.indexedMap
-          (\index v ->
-            div []
-              [ input [ class "input", value v, onInput <| KindField index ] []
-              ]
-          )
-        <| Array.push ""
-        <| kind.default_fields
+        [ table []
+          <| List.indexedMap
+            (\index (k, v) ->
+              tr []
+                [ td []
+                  [ input
+                    [ class "input"
+                    , value k
+                    , placeholder "key"
+                    , onInput <| \k -> KindDefaultField index (k, v)
+                    ] []
+                  ]
+                , td []
+                  [ input
+                    [ class "input"
+                    , value v
+                    , placeholder "default value, may be empty"
+                    , onInput <| \v -> KindDefaultField index (k, v)
+                    ] []
+                  ]
+                ]
+            )
+          <| List.reverse
+          <| (::) ("", "")
+          <| List.reverse
+          <| Array.toList kind.default_fields
+        ]
       ]
     , div [ class "field is-horizontal" ]
       [ div [ class "field-label" ] []
