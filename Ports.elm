@@ -9,6 +9,7 @@ port changedKind : (String, Maybe Int, Maybe Int) -> Cmd msg
 port changedConfig : Config -> Cmd msg
 port runView : String -> Cmd msg
 port queueSaveRecord : RestrictedRecord -> Cmd msg
+port queueDeleteRecord : String -> Cmd msg
 port saveConfig : Config -> Cmd msg
 port saveToPouch : () -> Cmd msg
 port requestId : () -> Cmd msg

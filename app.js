@@ -47,6 +47,11 @@ function gotChange (change) {
     return
   }
 
+  if (doc._deleted) {
+    app.ports.gotDeletedRecord.send(record.id)
+    return
+  }
+
   let record = fromPouch(doc)
 
   recordStore[record.id] = record
@@ -55,11 +60,7 @@ function gotChange (change) {
     kindStore[record.kind][record.id] = true
   }
 
-  if (doc._deleted) {
-    app.ports.gotDeletedRecord.send(record.id)
-  } else {
-    app.ports.gotUpdatedRecord.send(record)
-  }
+  app.ports.gotUpdatedRecord.send(record)
 
   for (let idx = 0; idx < record.k.length; idx++) {
     preCalc(record.id, idx, record.v[idx])
@@ -137,13 +138,14 @@ app.ports.runView.subscribe(
 
 var queue = {}
 app.ports.queueSaveRecord.subscribe(record => {
-  // this must be updated
   queue[record.id] = true
-
-  app.ports.gotPendingSaves.send(Object.keys(queue).length)
-
-  // update the record in the canonical store
   recordStore[record.id] = record
+  app.ports.gotPendingSaves.send(Object.keys(queue).length)
+})
+app.ports.queueDeleteRecord.subscribe(_id => {
+  queue[_id] = true
+  delete recordStore[_id]
+  app.ports.gotPendingSaves.send(Object.keys(queue).length)
 })
 
 app.ports.changedKind.subscribe(([_id, prev, curr]) => {
@@ -173,9 +175,15 @@ app.ports.saveToPouch.subscribe(() => {
 
   var docslist = Object.keys(queue)
     .map(_id => {
-      let doc = toPouch(recordStore[_id])
-      doc._rev = revCache[_id]
-      return doc
+      let record = recordStore[_id]
+      if (!record) {
+        let doc = {_id, _deleted: true, _rev: revCache[_id]}
+        return doc
+      } else {
+        let doc = toPouch(record)
+        doc._rev = revCache[_id]
+        return doc
+      }
     })
 
   changes.cancel() // stop listening here and start again after the save is done

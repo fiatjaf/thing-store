@@ -112,6 +112,7 @@ type Msg
   | ChangeView View
   | NewRecord (Maybe (Int, Array String))
   | CopyRecord String
+  | DeleteRecord String
   | StopEditingLinked
   | RecordAction String Record.Msg
   | SettingsAction Settings.Msg
@@ -171,6 +172,10 @@ update msg model =
           ( { model | records = model.records |> add model.next_id base.kind (Just base.k) }
           , requestId ()
           )
+    DeleteRecord id ->
+      ( { model | records = model.records |> Dict.remove id }
+      , queueDeleteRecord id
+      )
     StopEditingLinked -> ( { model | editing_linked = Debug.log "stopping" Nothing }, Cmd.none )
     RecordAction id rmsg ->
       case get id model.records of
@@ -445,6 +450,8 @@ viewContextMenuItems kinds context =
           )
         |> (::) ( item "Remove kind", RecordAction rec.id (ChangeKind Nothing))
       , [ ( item "Copy record template", CopyRecord rec.id )
+        ]
+      , [ ( item "Delete record", DeleteRecord rec.id )
         ]
       ]
     KeyValueContext rec idx ->
