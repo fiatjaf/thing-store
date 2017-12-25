@@ -21,3 +21,6 @@ port gotCalcResult : ((String, Int, String) -> msg) -> Sub msg
 port gotCalcError : ((String, Int, String) -> msg) -> Sub msg
 port gotId : (String -> msg) -> Sub msg
 port gotPendingSaves : (Int -> msg) -> Sub msg
+port gotUpdatedConfig : (Config -> msg) -> Sub msg
+port gotUpdatedRecord : (RestrictedRecord -> msg) -> Sub msg
+port gotDeletedRecord : (String -> msg) -> Sub msg

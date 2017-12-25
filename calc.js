@@ -59,6 +59,7 @@ module.exports.calc = function calc (currentId, value) {
           ? e.message.slice(16)
           : e.message
       }
+      e.message = `error on calc(${value}): ${e.message}`
       throw e
     })
 }

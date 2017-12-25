@@ -22,19 +22,12 @@ import Ports exposing (..)
 
 
 main =
-  Html.programWithFlags
+  Html.program
     { init = init
     , view = view
     , update = update
     , subscriptions = subscriptions
     }
-
-type alias Flags =
-  { records : List RestrictedRecord
-  , config : Config
-  , blank : String
-  }
-
 
 -- MODEL
 
@@ -62,19 +55,16 @@ type View
   | TableView
   | JSONView String
 
-init : Flags -> (Model, Cmd Msg)
-init flags =
+init : (Model, Cmd Msg)
+init =
   let
     (context_menu, msg) = ContextMenu.init
-    records = Dict.fromList <| List.map (\r -> ( r.id, fromRestricted r )) flags.records
-    nrecords = Dict.size records
   in
-    ( { records = ( records
-        |> if nrecords == 0 then add flags.blank Nothing Nothing else identity )
+    ( { records = Dict.empty
       , pending_saves = 0
       , view = FloatingView
       , page = HomePage
-      , settings = { defaultSettings | config = flags.config }
+      , settings = defaultSettings
       , next_id = ""
       , notification = Nothing
       , dragging = Nothing
@@ -85,15 +75,6 @@ init flags =
     , Cmd.batch
       [ requestId ()
       , Cmd.map ContextMenuAction msg
-      , Cmd.batch <| 
-        ( List.concat
-          <| List.map
-            (\r -> Array.toList
-              <| Array.indexedMap (\idx v -> changedValue (r.id, idx, v))
-              <| r.v
-            )
-          <| flags.records
-        )
       ]
     )
 
@@ -118,6 +99,9 @@ type Msg
   = EraseNotification
   | Notify String
   | Navigate Page
+  | GotUpdatedConfig Config
+  | GotUpdatedRecord RestrictedRecord
+  | GotDeletedRecord String
   | NextBlankId String
   | PendingSaves Int
   | SavePending
@@ -146,6 +130,17 @@ update msg model =
       , delay 5 EraseNotification
       )
     Navigate page -> ( { model | page = page }, Cmd.none )
+    GotUpdatedConfig c ->
+      let settings = model.settings
+      in ( { model | settings = { settings | config = c } }, Cmd.none )
+    GotUpdatedRecord rr ->
+      ( { model | records = model.records |> insert rr.id ( fromRestricted rr ) }
+      , Cmd.none
+      )
+    GotDeletedRecord id ->
+      ( { model | records = model.records |> Dict.remove id }
+      , Cmd.none
+      )
     NextBlankId id -> ( { model | next_id = id }, Cmd.none )
     PendingSaves n -> ( { model | pending_saves = n }, Cmd.none )
     SavePending -> ( model, saveToPouch () )
@@ -260,7 +255,10 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.batch
-    [ gotId NextBlankId
+    [ gotUpdatedConfig GotUpdatedConfig
+    , gotUpdatedRecord GotUpdatedRecord
+    , gotDeletedRecord GotDeletedRecord
+    , gotId NextBlankId
     , case model.dragging of
       Nothing ->
         case model.resizing of

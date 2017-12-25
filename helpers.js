@@ -51,6 +51,24 @@ module.exports.toPouch = function toPouch (elmRecord) {
   // still needs the _rev
 }
 
+module.exports.fromPouch = function fromPouch (doc) {
+  return {
+    id: doc._id,
+    pos: doc.pos,
+    width: doc.width || 180,
+    kind: doc.kind === undefined ? null : doc.kind,
+    k: doc.kv.map(kv => kv[0]),
+    v: doc.kv.map(kv => kv[1]),
+    c: doc.kv.map(kv => kv[1]),
+    e: doc.kv.map(() => false),
+    f: doc.f
+      ? doc.f
+        .map(({l}) => ({linked: l}))
+      : doc.kv.map(() => ({linked: false})),
+    focused: false
+  }
+}
+
 module.exports.setAt = function setAt (object, path, value) {
   var o = object
 
